@@ -158,8 +158,6 @@ class CellSplitter:
 		self.fig = fig
 		self.axes = axes
 		self.cells = cells
-		# self.xs = list(line.get_xdata())
-		# self.ys = list(line.get_ydata())
 		self.cid = fig.canvas.mpl_connect('button_press_event', self)
 
 	def __call__(self, event):
@@ -177,11 +175,6 @@ class CellSplitter:
 					ax.scatter(col, row)
 					fig.canvas.draw()
 
-
-		# self.xs.append(event.xdata)
-		# self.ys.append(event.ydata)
-		# self.line.set_data(self.xs, self.ys)
-		# self.line.figure.canvas.draw()
 
 
 if __name__ == "__main__":
