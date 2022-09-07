@@ -7,17 +7,17 @@ def test_binary_mask_to_shapes():
 	
 	## not big enough to be a shape
 	mask[0,0] = 1
-	shape1 = Shape({(0,0)})
+	shape1 = Shape({(0,0)}, (11,11))
 
 	## big enough to be a shape
 	mask[1,1:5] = 1
 	mask[2,1:5] = 1
-	shape2 = Shape({(1,1),(1,2),(1,3),(1,4),(2,1),(2,2),(2,3),(2,4)})
+	shape2 = Shape({(1,1),(1,2),(1,3),(1,4),(2,1),(2,2),(2,3),(2,4)}, (11,11))
 
 	## also big enough to be a shape
 	mask[6,9:] = 1
 	mask[7,:10] = 1
-	shape3 = Shape({(6,9),(6,10),(7,0),(7,1),(7,2),(7,3),(7,4),(7,5),(7,6),(7,7),(7,8),(7,9)})
+	shape3 = Shape({(6,9),(6,10),(7,0),(7,1),(7,2),(7,3),(7,4),(7,5),(7,6),(7,7),(7,8),(7,9)}, (11,11))
 
 	cells = binary_mask_to_shapes(mask, cutoff=1)
 
@@ -30,3 +30,5 @@ def test_binary_mask_to_shapes():
 	assert shape3.points in cells_points_list
 	
 
+def test_shape_smooth_shape():
+	mask = np.zeros([11, 11], dtype=int)
