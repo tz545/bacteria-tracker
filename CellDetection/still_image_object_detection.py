@@ -17,7 +17,9 @@ class Shape():
 			self.points = points
 		self._boundary = None
 		self.size = len(self.points) # can consider automatic thresholding of sizes
-		
+		if self.size < 10:
+			print("Small size detected! ", self.size)
+
 	@property
 	def boundary(self):
 		if self._boundary is None:
@@ -59,19 +61,20 @@ class Shape():
 		pixels_set = set([tuple(x) for x in pixels])
 
 		return pixels_set
-
 		
 
 class CellSplitter:
-	def __init__(self, fig, axes, cells):
+	def __init__(self, fig, axes, image, cells, cell_id_to_lines):
 		self.fig = fig
 		self.axes = axes
-		self.cells = cells
+		self.cells = cells 
+		self.image = image
+		self.cell_id_to_lines = cell_id_to_lines
 		self.cid = fig.canvas.mpl_connect('button_press_event', self)
 
 	def __call__(self, event):
 		print('click', event)
-		if event.inaxes!=self.axes: return
+		if event.inaxes != self.axes: return
 
 		to_delete = []
 		## double click on mouse to remove falsely identified cells
@@ -79,15 +82,38 @@ class CellSplitter:
 			row = int(np.rint(event.ydata))
 			col = int(np.rint(event.xdata))
 
-			for c in cells.keys():
-				if (row, col) in cells[c].points:
-					cell_id_to_lines[c].remove()
-					fig.canvas.draw()
+			for c in self.cells.keys():
+				if (row, col) in self.cells[c].points:
+					self.cell_id_to_lines[c].remove()
 					to_delete.append(c)
 		
-		for c in to_delete:
+		to_segment = []
+		## single right click on mouse on identified regions to segment further
+		if not event.dblclick and event.button == 3:
+			row = int(np.rint(event.ydata))
+			col = int(np.rint(event.xdata))
+
+			for c in self.cells.keys():
+				if (row, col) in self.cells[c].points:
+					self.cell_id_to_lines[c].remove()
+					to_segment.append(c)
+
+		for c_d in to_delete:
 			self.cells.pop(c)
-			cell_id_to_lines.pop(c)
+			self.cell_id_to_lines.pop(c)
+
+		for c_s in to_segment:
+			cell_c = self.cells.pop(c_s)
+			self.cell_id_to_lines.pop(c_s)
+			segmentation_to_shapes(self.cells, self.image, points=cell_c.points, cutoff=10)
+			for cell in self.cells.keys():
+				if cell not in self.cell_id_to_lines.keys():
+					edges = self.cells[cell].boundary
+					self.cell_id_to_lines[cell], = self.axes.plot(edges[:,1], edges[:,0], c='k')
+
+
+		self.fig.canvas.draw()
+
 
 
 def kmeans_segmentation(image, points=None):
@@ -116,8 +142,24 @@ def kmeans_segmentation(image, points=None):
 		return points_array[segmented_data.flatten()==1]
 
 
+def threshold_segmentation(image, points=None):
+
+	if points == None:
+		binary_mask = np.sign(image - 1.25*np.median(image)).astype(int)
+		return np.argwhere(binary_mask==1)
+		
+	else:
+		points_array = np.array(list(points))
+		im_vals = image[points_array[:,0], points_array[:,1]]
+		binary_mask = np.sign(im_vals - 0.9*np.median(im_vals)).astype(int)	
+		return points_array[binary_mask==1]
+
+
+
 def add_shapes_from_pixels(pixels, cutoff):
-	"""pixels: set of (tuple) pixel coordinates"""
+	"""This function converts all groups of connected pixels (bigger than the cutoff size) 
+ 	into Shape objects and stores them within a dictionary.
+	pixels: set of (tuple) pixel coordinates"""
 
 	new_shapes_list = []
 
@@ -152,81 +194,23 @@ def add_shapes_from_pixels(pixels, cutoff):
 	return new_shapes_list
 
 
-def segmentation(cells, image, points=None, cutoff=4, smooth=True):
+def segmentation_to_shapes(cells, image, points=None, cutoff=4, smooth=True):
 	"""Either an identified region needs to be split into multiple cells
 	or an unselected region contains cells that need to be segmented
 	image: 2D numpy array of pixel values
 	points: set of (tuple) pixel coordinates that will undergo another round of kmeans segmentation"""
 
-	segmented_points = kmeans_segmentation(image, points)
+	segmented_points = threshold_segmentation(image, points)
 
 	shape_pixels_set = set([tuple(x) for x in segmented_points])
 
 	new_shapes_list = add_shapes_from_pixels(shape_pixels_set, cutoff)
 
 	for s in new_shapes_list:
-		cells[len(cells)+1] = Shape(s, im, smooth)
-
-	return cells
-
-
-
-# def raw_image_to_binary_mask(image, segmentation, show_mask=False):
-# 	"""Initial segmentation of raw image. Segmentation options are:
-# 	'threshold', using 1.5x the median brightness value, or
-# 	'kmeans', using k-means clustering with k=2"""
-
-# 	im = cv2.imread(image, cv2.IMREAD_UNCHANGED)
-# 	imarray = np.array(im.reshape(im.shape), dtype=np.float32)
-
-# 	## Blur the image to get rid of patchy artifacts
-# 	img_blur = cv2.GaussianBlur(imarray,(3,3), sigmaX=0, sigmaY=0)
-
-# 	if segmentation == 'threshold':
-# 		segmented_image = np.sign(img_blur-1.5*np.median(img_blur.flatten()))
-# 		segmented_image = segmented_image.astype(int)
-# 		segmented_image[segmented_image==-1] = 0
-
-# 	elif segmentation == 'kmeans':	
-# 		segmented_image = kmeans_segmentation(img_blur)
-
-# 	if show_mask:
-
-# 		## Use binary dilation to get rough boundaries of segmentation for visualization only
-# 		## https://stackoverflow.com/questions/51696326/extracting-boundary-of-a-numpy-array
-# 		kernel = np.ones((3,3),dtype=int) # for 4-connected
-# 		segmented_boundaries = binary_dilation(segmented_image==0, kernel) & segmented_image
-
-# 		boundary_mask = np.zeros([im.shape[0],im.shape[1],4])
-# 		boundary_mask[:,:,-1] = segmented_boundaries
-
-# 		plt.imshow(imarray)
-# 		plt.imshow(boundary_mask)
-# 		plt.show()
-
-# 	return segmented_image
-
-
-# def binary_mask_to_shapes(mask, im, cutoff=4, smooth=False):
-# 	"""Initial segmentation step returns mask of 0s (background) and 1s (shapes).
-# 	This function converts all groups of connected pixels (bigger than the cutoff size) 
-# 	into Shape objects and stores them within a dictionary."""
-
-# 	## np.argwhere(x==1) returns array of [row,column] 
-# 	shape_pixels = np.argwhere(mask==1)
-# 	shape_pixels_set = set([tuple(x) for x in shape_pixels])
-
-# 	cells = dict()
-# 	new_shapes_list = add_shapes_from_pixels(shape_pixels_set, cutoff)
-
-# 	for s in new_shapes_list:
-# 		cells[len(cells)+1] = Shape(s, im, smooth)
-
-# 	return cells
-
-
-
-
+		if len(cells) == 0:
+			cells[len(cells)+1] = Shape(s, im, smooth)
+		else:
+			cells[max(cells.keys())+1] = Shape(s, im, smooth)
 
 
 
@@ -238,25 +222,25 @@ if __name__ == "__main__":
 	## Blur the image to get rid of patchy artifacts
 	img_blur = cv2.GaussianBlur(imarray,(3,3), sigmaX=0, sigmaY=0)
 
-	cells = segmentation(dict(), img_blur, cutoff=10)
+	cells_frame1 = dict()
+	segmentation_to_shapes(cells_frame1, img_blur, cutoff=10, smooth=False)
 
-	print('No of cells: ', len(cells))
+	print('No of cells: ', len(cells_frame1))
 
 	fig, ax = plt.subplots()
-
 	ax.imshow(imarray)
 
 	cell_id_to_lines = {}
 
-	for c in cells.keys():
-		edges = cells[c].boundary
+	for c in cells_frame1.keys():
+		edges = cells_frame1[c].boundary
 		cell_id_to_lines[c], = ax.plot(edges[:,1], edges[:,0], c='k')
 
-	cellsplitter = CellSplitter(fig, ax, cells)
+	cellsplitter = CellSplitter(fig, ax, imarray, cells_frame1, cell_id_to_lines)
 	
 	plt.show()
 
-	print('No of cells: ', len(cells))
+	print('No of cells: ', len(cells_frame1))
 	
 
 
