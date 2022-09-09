@@ -105,7 +105,8 @@ class CellSplitter:
 		for c_s in to_segment:
 			cell_c = self.cells.pop(c_s)
 			self.cell_id_to_lines.pop(c_s)
-			segmentation_to_shapes(self.cells, self.image, points=cell_c.points, cutoff=10)
+			# segmentation_to_shapes(self.cells, self.image, kmeans_segmentation, points=cell_c.points, cutoff=10)
+			segmentation_to_shapes(self.cells, self.image, threshold_segmentation, 0.8, points=cell_c.points, cutoff=10)
 			for cell in self.cells.keys():
 				if cell not in self.cell_id_to_lines.keys():
 					edges = self.cells[cell].boundary
@@ -142,23 +143,26 @@ def kmeans_segmentation(image, points=None):
 		return points_array[segmented_data.flatten()==1]
 
 
-def threshold_segmentation(image, points=None):
+def threshold_segmentation(image, threshold, points=None):
+	"""Computes binary threshold segmentation on either entire image
+	or subset of image pixels (as given by set of points)
+	threshold: multiplier of median value used for segmentation"""
 
 	if points == None:
-		binary_mask = np.sign(image - 1.25*np.median(image)).astype(int)
+		binary_mask = np.sign(image - threshold*np.median(image)).astype(int)
 		return np.argwhere(binary_mask==1)
 		
 	else:
 		points_array = np.array(list(points))
 		im_vals = image[points_array[:,0], points_array[:,1]]
-		binary_mask = np.sign(im_vals - 0.9*np.median(im_vals)).astype(int)	
+		binary_mask = np.sign(im_vals - threshold*np.median(im_vals)).astype(int)	
 		return points_array[binary_mask==1]
 
 
 
 def add_shapes_from_pixels(pixels, cutoff):
 	"""This function converts all groups of connected pixels (bigger than the cutoff size) 
- 	into Shape objects and stores them within a dictionary.
+	into Shape objects and stores them within a dictionary.
 	pixels: set of (tuple) pixel coordinates"""
 
 	new_shapes_list = []
@@ -194,13 +198,13 @@ def add_shapes_from_pixels(pixels, cutoff):
 	return new_shapes_list
 
 
-def segmentation_to_shapes(cells, image, points=None, cutoff=4, smooth=True):
+def segmentation_to_shapes(cells, image, segmentation_function, *threshold, points=None, cutoff=4, smooth=True):
 	"""Either an identified region needs to be split into multiple cells
 	or an unselected region contains cells that need to be segmented
 	image: 2D numpy array of pixel values
-	points: set of (tuple) pixel coordinates that will undergo another round of kmeans segmentation"""
+	points: set of (tuple) pixel coordinates that will undergo another round of segmentation"""
 
-	segmented_points = threshold_segmentation(image, points)
+	segmented_points = segmentation_function(image, *threshold, points)
 
 	shape_pixels_set = set([tuple(x) for x in segmented_points])
 
@@ -208,9 +212,9 @@ def segmentation_to_shapes(cells, image, points=None, cutoff=4, smooth=True):
 
 	for s in new_shapes_list:
 		if len(cells) == 0:
-			cells[len(cells)+1] = Shape(s, im, smooth)
+			cells[len(cells)+1] = Shape(s, image, smooth)
 		else:
-			cells[max(cells.keys())+1] = Shape(s, im, smooth)
+			cells[max(cells.keys())+1] = Shape(s, image, smooth)
 
 
 
@@ -220,10 +224,18 @@ if __name__ == "__main__":
 	imarray = np.array(im.reshape(im.shape), dtype=np.float32)
 
 	## Blur the image to get rid of patchy artifacts
-	img_blur = cv2.GaussianBlur(imarray,(3,3), sigmaX=0, sigmaY=0)
+	img_blur = cv2.GaussianBlur(imarray,(3,3), sigmaX=10, sigmaY=10)
+
+	## rescale so the values fit into uint8 (required for adaptiveThreshold function)
+	img_blur = (img_blur - min(img_blur.flatten()))/max(img_blur.flatten()) * 255
+	img_blur = img_blur.astype('uint8')
+
+	grey2 = cv2.adaptiveThreshold(src=img_blur, dst=img_blur, maxValue=255, adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C, thresholdType=cv2.THRESH_BINARY, blockSize=7, C=min(img_blur.flatten()))
+	img_blur = cv2.GaussianBlur(img_blur.astype(np.float32),(11,11), sigmaX=10, sigmaY=10)
 
 	cells_frame1 = dict()
-	segmentation_to_shapes(cells_frame1, img_blur, cutoff=10, smooth=False)
+	segmentation_to_shapes(cells_frame1, img_blur.astype(np.float32), threshold_segmentation, 1.5, cutoff=50, smooth=False)
+	# segmentation_to_shapes(cells_frame1, img_blur.astype(np.float32), kmeans_segmentation, cutoff=50, smooth=False)
 
 	print('No of cells: ', len(cells_frame1))
 
@@ -240,7 +252,6 @@ if __name__ == "__main__":
 	
 	plt.show()
 
-	print('No of cells: ', len(cells_frame1))
 	
 
 
