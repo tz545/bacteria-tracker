@@ -70,50 +70,88 @@ class CellSplitter:
 		self.cells = cells 
 		self.image = image
 		self.cell_id_to_lines = cell_id_to_lines
-		self.cid = fig.canvas.mpl_connect('button_press_event', self)
+		self.press = False
+		self.addpoints = []
+		self.radius = 5
 
-	def __call__(self, event):
-		print('click', event)
+	def connect(self):
+		self.cidpress = self.fig.canvas.mpl_connect('button_press_event', self.on_press)
+		self.cidrelease = self.fig.canvas.mpl_connect('button_release_event', self.on_release)
+		self.cidmotion = self.fig.canvas.mpl_connect('motion_notify_event', self.on_motion)
+
+
+	def on_press(self, event):
+		"""Delete cell or add new cell"""
+
 		if event.inaxes != self.axes: return
 
-		to_delete = []
-		## double click on mouse to remove falsely identified cells
-		if event.dblclick and event.button == 1:
-			row = int(np.rint(event.ydata))
-			col = int(np.rint(event.xdata))
+		row = int(np.rint(event.ydata))
+		col = int(np.rint(event.xdata))
 
+		## right click on mouse to remove falsely identified cells
+		if not event.dblclick and event.button == 3:
+			to_delete = []
+			
 			for c in self.cells.keys():
 				if (row, col) in self.cells[c].points:
 					self.cell_id_to_lines[c].remove()
 					to_delete.append(c)
+
+			for c_d in to_delete:
+				self.cells.pop(c_d)
+				self.cell_id_to_lines.pop(c_d)
+
+
+			self.fig.canvas.draw()
+
+			return
+
+		## left click and drag on mouse to draw new cell
+		elif not event.dblclick and event.button == 1:
+			self.press = True
+
+	def on_motion(self, event):
+		"""Keep track of all pixels passed over by mouse."""
+
+		if not self.press or event.inaxes != self.axes:
+			return
+
+		row = int(np.rint(event.ydata))
+		col = int(np.rint(event.xdata))
+
+		self.addpoints.append((row, col))
+
+
+	def on_release(self, event):
+		"""Add cell and clear button press information"""
+
+		if not self.press or event.inaxes != self.axes:
+			return
+
+		new_shape = set()
+
+		for point in self.addpoints:
+			for i in range(-self.radius, self.radius+1):
+				for j in range(-self.radius, self.radius+1):
+					if abs(i) + abs(j) <= self.radius:
+						new_shape.add((point[0]+i, point[1]+j))
+
+		new_key = max(self.cells.keys())+1
+		self.cells[new_key] = Shape(new_shape, self.image, smooth=False)
+		edges = self.cells[new_key].boundary
+		self.cell_id_to_lines[new_key], = self.axes.plot(edges[:,1], edges[:,0], c='k')
 		
-		to_segment = []
-		## single right click on mouse on identified regions to segment further
-		if not event.dblclick and event.button == 3:
-			row = int(np.rint(event.ydata))
-			col = int(np.rint(event.xdata))
-
-			for c in self.cells.keys():
-				if (row, col) in self.cells[c].points:
-					self.cell_id_to_lines[c].remove()
-					to_segment.append(c)
-
-		for c_d in to_delete:
-			self.cells.pop(c)
-			self.cell_id_to_lines.pop(c)
-
-		for c_s in to_segment:
-			cell_c = self.cells.pop(c_s)
-			self.cell_id_to_lines.pop(c_s)
-			# segmentation_to_shapes(self.cells, self.image, kmeans_segmentation, points=cell_c.points, cutoff=10)
-			segmentation_to_shapes(self.cells, self.image, threshold_segmentation, 0.8, points=cell_c.points, cutoff=10)
-			for cell in self.cells.keys():
-				if cell not in self.cell_id_to_lines.keys():
-					edges = self.cells[cell].boundary
-					self.cell_id_to_lines[cell], = self.axes.plot(edges[:,1], edges[:,0], c='k')
-
-
+		self.press = False
+		self.addpoints = []
 		self.fig.canvas.draw()
+
+
+	def disconnect(self):
+		"""Disconnect all callbacks"""
+
+		self.fig.canvas.mpl_disconnect(self.cidpress)
+		self.fig.canvas.mpl_disconnect(self.cidrelease)
+		self.fig.canvas.mpl_disconnect(self.cidmotion)
 
 
 
@@ -223,34 +261,44 @@ if __name__ == "__main__":
 	im = cv2.imread('cells.tif', cv2.IMREAD_UNCHANGED)
 	imarray = np.array(im.reshape(im.shape), dtype=np.float32)
 
-	## Blur the image to get rid of patchy artifacts
-	img_blur = cv2.GaussianBlur(imarray,(3,3), sigmaX=10, sigmaY=10)
+	assert imarray.shape[0] % 2 == 0 and imarray.shape[1] % 2 == 0, "Input image dimensions should be even."
+	quadrants = [imarray[:imarray.shape[0]//2, :imarray.shape[0]//2],\
+				imarray[imarray.shape[0]//2:, :imarray.shape[0]//2],\
+				imarray[:imarray.shape[0]//2, imarray.shape[0]//2:],\
+				imarray[imarray.shape[0]//2:, imarray.shape[0]//2:]]
 
-	## rescale so the values fit into uint8 (required for adaptiveThreshold function)
-	img_blur = (img_blur - min(img_blur.flatten()))/max(img_blur.flatten()) * 255
-	img_blur = img_blur.astype('uint8')
+	for q in quadrants:
 
-	grey2 = cv2.adaptiveThreshold(src=img_blur, dst=img_blur, maxValue=255, adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C, thresholdType=cv2.THRESH_BINARY, blockSize=7, C=min(img_blur.flatten()))
-	img_blur = cv2.GaussianBlur(img_blur.astype(np.float32),(11,11), sigmaX=10, sigmaY=10)
+		## Blur the image to get rid of patchy artifacts
+		img_blur = cv2.GaussianBlur(q,(3,3), sigmaX=10, sigmaY=10)
 
-	cells_frame1 = dict()
-	segmentation_to_shapes(cells_frame1, img_blur.astype(np.float32), threshold_segmentation, 1.5, cutoff=50, smooth=False)
-	# segmentation_to_shapes(cells_frame1, img_blur.astype(np.float32), kmeans_segmentation, cutoff=50, smooth=False)
+		## rescale so the values fit into uint8 (required for adaptiveThreshold function)
+		img_blur = (img_blur - min(img_blur.flatten()))/max(img_blur.flatten()) * 255
+		img_blur = img_blur.astype('uint8')
 
-	print('No of cells: ', len(cells_frame1))
+		grey2 = cv2.adaptiveThreshold(src=img_blur, dst=img_blur, maxValue=255, adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C, thresholdType=cv2.THRESH_BINARY, blockSize=7, C=min(img_blur.flatten()))
+		img_blur = cv2.GaussianBlur(img_blur.astype(np.float32),(11,11), sigmaX=10, sigmaY=10)
 
-	fig, ax = plt.subplots()
-	ax.imshow(imarray)
+		cells_single_frame = {}
+		segmentation_to_shapes(cells_single_frame, img_blur.astype(np.float32), threshold_segmentation, 1.5, cutoff=50, smooth=False)
+		
+		print('No of cells: ', len(cells_single_frame))
 
-	cell_id_to_lines = {}
+		fig, ax = plt.subplots()
+		ax.imshow(q)
 
-	for c in cells_frame1.keys():
-		edges = cells_frame1[c].boundary
-		cell_id_to_lines[c], = ax.plot(edges[:,1], edges[:,0], c='k')
+		cell_id_to_lines = {}
 
-	cellsplitter = CellSplitter(fig, ax, imarray, cells_frame1, cell_id_to_lines)
-	
-	plt.show()
+		for c in cells_single_frame.keys():
+			edges = cells_single_frame[c].boundary
+			cell_id_to_lines[c], = ax.plot(edges[:,1], edges[:,0], c='k')
+
+		cellsplitter = CellSplitter(fig, ax, q, cells_single_frame, cell_id_to_lines)
+		cellsplitter.connect()
+		
+		plt.show()
+
+		cellsplitter.disconnect()
 
 	
 
