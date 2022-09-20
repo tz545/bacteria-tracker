@@ -125,8 +125,13 @@ class CellSplitter:
 	def on_release(self, event):
 		"""Add cell and clear button press information"""
 
-		if not self.press or event.inaxes != self.axes:
+		if not self.press:
 			return
+
+		if len(self.addpoints) < 4:
+			self.press = False
+			self.addpoints = []
+			return 
 
 		new_shape = set()
 
@@ -134,7 +139,9 @@ class CellSplitter:
 			for i in range(-self.radius, self.radius+1):
 				for j in range(-self.radius, self.radius+1):
 					if abs(i) + abs(j) <= self.radius:
-						new_shape.add((point[0]+i, point[1]+j))
+						if point[0]+i >= 0 and point[0]+i <= self.image.shape[0]-1 and point[1] + j >= 0 and point[1] + j <= self.image.shape[1]-1:
+							
+							new_shape.add((point[0]+i, point[1]+j))
 
 		new_key = max(self.cells.keys())+1
 		self.cells[new_key] = Shape(new_shape, self.image, smooth=False)
@@ -267,10 +274,10 @@ if __name__ == "__main__":
 				imarray[:imarray.shape[0]//2, imarray.shape[0]//2:],\
 				imarray[imarray.shape[0]//2:, imarray.shape[0]//2:]]
 
-	for q in quadrants:
+	for q in range(len(quadrants)):
 
 		## Blur the image to get rid of patchy artifacts
-		img_blur = cv2.GaussianBlur(q,(3,3), sigmaX=10, sigmaY=10)
+		img_blur = cv2.GaussianBlur(quadrants[q],(3,3), sigmaX=10, sigmaY=10)
 
 		## rescale so the values fit into uint8 (required for adaptiveThreshold function)
 		img_blur = (img_blur - min(img_blur.flatten()))/max(img_blur.flatten()) * 255
@@ -280,12 +287,12 @@ if __name__ == "__main__":
 		img_blur = cv2.GaussianBlur(img_blur.astype(np.float32),(11,11), sigmaX=10, sigmaY=10)
 
 		cells_single_frame = {}
-		segmentation_to_shapes(cells_single_frame, img_blur.astype(np.float32), threshold_segmentation, 1.5, cutoff=50, smooth=False)
+		segmentation_to_shapes(cells_single_frame, img_blur.astype(np.float32), threshold_segmentation, 1.5, cutoff=100, smooth=False)
 		
 		print('No of cells: ', len(cells_single_frame))
 
 		fig, ax = plt.subplots()
-		ax.imshow(q)
+		ax.imshow(quadrants[q])
 
 		cell_id_to_lines = {}
 
@@ -293,12 +300,31 @@ if __name__ == "__main__":
 			edges = cells_single_frame[c].boundary
 			cell_id_to_lines[c], = ax.plot(edges[:,1], edges[:,0], c='k')
 
-		cellsplitter = CellSplitter(fig, ax, q, cells_single_frame, cell_id_to_lines)
+		cellsplitter = CellSplitter(fig, ax, quadrants[q], cells_single_frame, cell_id_to_lines)
 		cellsplitter.connect()
 		
 		plt.show()
 
 		cellsplitter.disconnect()
+
+		mask = np.zeros(quadrants[q].shape, dtype=int)
+
+
+		for cell in cells_single_frame.values():
+
+			## convert indices list to matrix
+			points_array = np.array(list(cell.points))
+			row = points_array[:,0]
+			col = points_array[:,1]
+
+			mask[row,col] += 1
+
+
+		print(np.max(mask))
+
+		np.save('cell_{0}.npy'.format(q), np.stack([quadrants[q], mask]))
+
+
 
 	
 
