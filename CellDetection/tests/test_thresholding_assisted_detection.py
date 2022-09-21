@@ -1,6 +1,6 @@
 import numpy as np
 from collections import deque
-from still_image_object_detection import Shape, add_shapes_from_pixels, threshold_segmentation, segmentation_to_shapes, kmeans_segmentation
+from thresholding_assisted_detection import Shape, add_shapes_from_pixels, threshold_segmentation, segmentation_to_shapes, kmeans_segmentation
 from scipy.ndimage.morphology import binary_dilation, binary_erosion
 
 def test_add_shapes_from_pixels():
