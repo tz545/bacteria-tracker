@@ -262,10 +262,64 @@ def segmentation_to_shapes(cells, image, segmentation_function, *threshold, poin
 			cells[max(cells.keys())+1] = Shape(s, image, smooth)
 
 
+def manual_correction(image):
+	"""Applies naive segmentation based on adaptive thresholding and allows interactive user correction.
+	Interactive controls:
 
-if __name__ == "__main__":
+	SINGLE RIGHT CLICK: remove cell
+	LEFT CLICK and DRAG: draw region of cell"""
 
-	im = cv2.imread('cells.tif', cv2.IMREAD_UNCHANGED)
+	## Blur the image to get rid of patchy artifacts
+	img_blur = cv2.GaussianBlur(image,(3,3), sigmaX=10, sigmaY=10)
+
+	## rescale so the values fit into uint8 (required for adaptiveThreshold function)
+	img_blur = (img_blur - min(img_blur.flatten()))/max(img_blur.flatten()) * 255
+	img_blur = img_blur.astype('uint8')
+
+	grey2 = cv2.adaptiveThreshold(src=img_blur, dst=img_blur, maxValue=255, adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C, thresholdType=cv2.THRESH_BINARY, blockSize=7, C=min(img_blur.flatten()))
+	img_blur = cv2.GaussianBlur(img_blur.astype(np.float32),(11,11), sigmaX=10, sigmaY=10)
+
+	cells_single_frame = {}
+	segmentation_to_shapes(cells_single_frame, img_blur.astype(np.float32), threshold_segmentation, 1.5, cutoff=100, smooth=False)
+	
+	print('No of cells: ', len(cells_single_frame))
+
+	fig, ax = plt.subplots()
+	ax.imshow(quadrants[q])
+
+	cell_id_to_lines = {}
+
+	for c in cells_single_frame.keys():
+		edges = cells_single_frame[c].boundary
+		cell_id_to_lines[c], = ax.plot(edges[:,1], edges[:,0], c='k')
+
+	cellsplitter = CellSplitter(fig, ax, quadrants[q], cells_single_frame, cell_id_to_lines)
+	cellsplitter.connect()
+	
+	plt.show()
+
+	cellsplitter.disconnect()
+
+	mask = np.zeros(image.shape, dtype=int)
+
+
+	for cell in cells_single_frame.values():
+
+		## convert indices list to matrix
+		points_array = np.array(list(cell.points))
+		row = points_array[:,0]
+		col = points_array[:,1]
+
+		mask[row,col] += 1
+
+	return cells_single_frame, np.stack([image, mask])
+
+
+
+def segment_images(image_file, image_number):
+	""""""
+
+	im = cv2.imread(image_file, cv2.IMREAD_UNCHANGED)
 	imarray = np.array(im.reshape(im.shape), dtype=np.float32)
 
 	assert imarray.shape[0] % 2 == 0 and imarray.shape[1] % 2 == 0, "Input image dimensions should be even."
@@ -276,55 +330,21 @@ if __name__ == "__main__":
 
 	for q in range(len(quadrants)):
 
-		## Blur the image to get rid of patchy artifacts
-		img_blur = cv2.GaussianBlur(quadrants[q],(3,3), sigmaX=10, sigmaY=10)
+		cells, image_with_mask = manual_correction(quadrants[q])
 
-		## rescale so the values fit into uint8 (required for adaptiveThreshold function)
-		img_blur = (img_blur - min(img_blur.flatten()))/max(img_blur.flatten()) * 255
-		img_blur = img_blur.astype('uint8')
-
-		grey2 = cv2.adaptiveThreshold(src=img_blur, dst=img_blur, maxValue=255, adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C, thresholdType=cv2.THRESH_BINARY, blockSize=7, C=min(img_blur.flatten()))
-		img_blur = cv2.GaussianBlur(img_blur.astype(np.float32),(11,11), sigmaX=10, sigmaY=10)
-
-		cells_single_frame = {}
-		segmentation_to_shapes(cells_single_frame, img_blur.astype(np.float32), threshold_segmentation, 1.5, cutoff=100, smooth=False)
-		
-		print('No of cells: ', len(cells_single_frame))
-
-		fig, ax = plt.subplots()
-		ax.imshow(quadrants[q])
-
-		cell_id_to_lines = {}
-
-		for c in cells_single_frame.keys():
-			edges = cells_single_frame[c].boundary
-			cell_id_to_lines[c], = ax.plot(edges[:,1], edges[:,0], c='k')
-
-		cellsplitter = CellSplitter(fig, ax, quadrants[q], cells_single_frame, cell_id_to_lines)
-		cellsplitter.connect()
-		
-		plt.show()
-
-		cellsplitter.disconnect()
-
-		mask = np.zeros(quadrants[q].shape, dtype=int)
+		np.save('data/cell_{0}.npy'.format(image_number+q), np.stack([quadrants[q], mask]))
 
 
-		for cell in cells_single_frame.values():
 
-			## convert indices list to matrix
-			points_array = np.array(list(cell.points))
-			row = points_array[:,0]
-			col = points_array[:,1]
+if __name__ == "__main__":
 
-			mask[row,col] += 1
+	segment_images('cells.tif', 4)
+	
+	
 
+	
 
-		print(np.max(mask))
-
-		np.save('cell_{0}.npy'.format(q), np.stack([quadrants[q], mask]))
-
-
+	
 
 	
 

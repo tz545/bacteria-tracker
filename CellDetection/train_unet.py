@@ -9,6 +9,7 @@ from torch.utils.data import Dataset, DataLoader, random_split
 import torchvision.transforms.functional as TF
 from unet import UNet
 import matplotlib.pyplot as plt
+import wandb
 
 
 class CellsDataset(Dataset):
@@ -57,6 +58,33 @@ class CellsDataset(Dataset):
 			self.samples.append({'image': horizontal_flip, 'mask': horizontal_flip_mask})
 			self.samples.append({'image': vertical_flip, 'mask': vertical_flip_mask})
 
+			## construct a set of lower-contrast data
+
+			low_contrast1 = TF.normalize(image, -10, 20)
+			low_contrast1_hflip = TF.hflip(low_contrast1)
+			low_contrast1_vflip = TF.vflip(low_contrast1)
+
+			self.samples.append({'image': low_contrast1, 'mask': mask})
+			self.samples.append({'image': low_contrast1_hflip, 'mask': horizontal_flip_mask})
+			self.samples.append({'image': low_contrast1_vflip, 'mask': vertical_flip_mask})
+
+			low_contrast2 = TF.normalize(image, -5, 40)
+			low_contrast2_hflip = TF.hflip(low_contrast2)
+			low_contrast2_vflip = TF.vflip(low_contrast2)
+
+			self.samples.append({'image': low_contrast2, 'mask': mask})
+			self.samples.append({'image': low_contrast2_hflip, 'mask': horizontal_flip_mask})
+			self.samples.append({'image': low_contrast2_vflip, 'mask': vertical_flip_mask})
+
+			low_contrast3 = TF.normalize(image, -30, 40)
+			low_contrast3_hflip = TF.hflip(low_contrast3)
+			low_contrast3_vflip = TF.vflip(low_contrast3)
+
+			self.samples.append({'image': low_contrast3, 'mask': mask})
+			self.samples.append({'image': low_contrast3_hflip, 'mask': horizontal_flip_mask})
+			self.samples.append({'image': low_contrast3_vflip, 'mask': vertical_flip_mask})
+
+
 	def __len__(self):
 		return len(self.samples)
 
@@ -97,6 +125,8 @@ def train_net(dataset, batch_size, epochs, learning_rate=1e-5):
 			output = model(batch['image'])
 			loss = criterion(output, batch['mask'])
 
+			wandb.log({"loss": loss})
+
 			loss.backward()
 			optimizer.step()
 
@@ -118,42 +148,58 @@ def train_net(dataset, batch_size, epochs, learning_rate=1e-5):
 			print("Total validation loss: ", total_val_loss/(i+1))
 
 
-	torch.save(model.state_dict(), "models/30_epochs.pt")
+	torch.save(model.state_dict(), "models/low_contrast_{0}_epochs.pt".format(epochs))
 
 	return train_loss, val_loss
 
 
-# dataset = CellsDataset('data')
-# train_net(dataset, batch_size=1, epochs=30)
+
 
 if __name__ == "__main__":
 
-	model = UNet(1, 4)
-	model.load_state_dict(torch.load("models/30_epochs.pt"))
-	model.eval()
+	wandb.init(project="UNet-cell-detection")
 
-	im = cv2.imread('cells_test.tif', cv2.IMREAD_UNCHANGED)
-	imarray = np.array(im.reshape(im.shape), dtype=np.float32)
+	wandb.config = {
+		"learning_rate": 1e-5,
+		"epochs": 50,
+		"batch_size": 128
+	}
 
-	assert imarray.shape[0] % 2 == 0 and imarray.shape[1] % 2 == 0, "Input image dimensions should be even."
-	quadrants = [imarray[:imarray.shape[0]//2, :imarray.shape[0]//2],\
-				imarray[imarray.shape[0]//2:, :imarray.shape[0]//2],\
-				imarray[:imarray.shape[0]//2, imarray.shape[0]//2:],\
-				imarray[imarray.shape[0]//2:, imarray.shape[0]//2:]]
+	test = True
 
-	for q in range(len(quadrants)):
-		# plt.imshow(quadrants[q])
-		img_blur = cv2.GaussianBlur(quadrants[q],(3,3), sigmaX=10, sigmaY=10)
+	if test:
 
-		image = torch.from_numpy(img_blur)
+		model = UNet(1, 4)
+		model.load_state_dict(torch.load("models/low_contrast_19_epochs.pt"))
+		model.eval()
 
-		image = image.float()
-		image = image/np.max(img_blur) # normalize input values to between 0 and 1
-		image = torch.unsqueeze(image, 0)
-		image = torch.unsqueeze(image, 0)
+		im = cv2.imread('cells_test.tif', cv2.IMREAD_UNCHANGED)
+		imarray = np.array(im.reshape(im.shape), dtype=np.float32)
 
-		mask = torch.argmax(model(image), dim=1)
-		print(mask.shape)
+		assert imarray.shape[0] % 2 == 0 and imarray.shape[1] % 2 == 0, "Input image dimensions should be even."
+		quadrants = [imarray[:imarray.shape[0]//2, :imarray.shape[0]//2],\
+					imarray[imarray.shape[0]//2:, :imarray.shape[0]//2],\
+					imarray[:imarray.shape[0]//2, imarray.shape[0]//2:],\
+					imarray[imarray.shape[0]//2:, imarray.shape[0]//2:]]
 
-		plt.imshow(mask.squeeze().detach().numpy(), cmap='binary', alpha=0.3)
-		plt.show()
+		for q in range(len(quadrants)):
+			# plt.imshow(quadrants[q])
+			img_blur = cv2.GaussianBlur(quadrants[q],(3,3), sigmaX=10, sigmaY=10)
+
+			image = torch.from_numpy(img_blur)
+
+			image = image.float()
+			image = image/np.max(img_blur) # normalize input values to between 0 and 1
+			image = torch.unsqueeze(image, 0)
+			image = torch.unsqueeze(image, 0)
+
+			mask = torch.argmax(model(image), dim=1)
+			print(mask.shape)
+
+			plt.imshow(mask.squeeze().detach().numpy(), cmap='binary', alpha=0.3)
+			plt.show()
+
+	else:
+
+		dataset = CellsDataset('data')
+		train_net(dataset, batch_size=1, epochs=19)
