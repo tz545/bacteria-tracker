@@ -30,21 +30,6 @@ def test_pixels_to_shapes():
 	assert shape2 in cells
 	assert shape3 in cells
 	
-
-def test_shape_smooth_shape():
-	mask = np.zeros([11, 11], dtype=int)
-	points = np.array([[3,4],[3,5],[4,4],[5,3],[5,4],[5,5],[6,4],[6,5]])
-	mask[points[:,0], points[:,1]] = 1
-	kernel = np.ones([3,3], dtype=int)
-	dilation = binary_dilation(mask, kernel).astype(int)
-	erosion = binary_erosion(dilation, kernel).astype(int)
-	eroded_points1 = np.argwhere(erosion==1)
-	eroded_points2 = np.array([[3,4],[3,5],[4,4],[4,5],[5,3],[5,4],[5,5],[6,4],[6,5]])
-
-	shape = Shape(set([tuple(x) for x in points]), mask, smooth=True)
-
-	assert shape.points == set([tuple(x) for x in eroded_points1])
-	assert shape.points == set([tuple(x) for x in eroded_points2])
 	
 
 def test_mask_to_shapes_handles_overlaps():
@@ -57,11 +42,11 @@ def test_mask_to_shapes_handles_overlaps():
 	a[3,2] = 2
 	a[3,3] = 1
 
-	cells_list = mask_to_cells(a, a, 0, 10)
+	cells_list = mask_to_cells(a, 0, 10)
 
-	shape1 = Shape(set([(0,1), (1,1), (1,2)]), a)
-	shape2 = Shape(set([(1,2), (3,2), (1,1), (2,2)]), a)
-	shape3 = Shape(set([(3,2), (3,3)]), a)
+	shape1 = Shape(set([(0,1), (1,1), (1,2)]))
+	shape2 = Shape(set([(1,2), (3,2), (1,1), (2,2)]))
+	shape3 = Shape(set([(3,2), (3,3)]))
 
 	assert len(cells_list) == 3
 

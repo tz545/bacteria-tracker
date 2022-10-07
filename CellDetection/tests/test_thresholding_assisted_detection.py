@@ -27,7 +27,7 @@ def test_segmentation_to_shapes_adds_to_empty_cells():
 	mask1 = np.array([[1,2],[2,0],[2,1],[2,2]])
 
 	cells = {}
-	segmentation_to_shapes(cells, image, threshold_segmentation, 1.1, cutoff=1, smooth=False)
+	segmentation_to_shapes(cells, threshold_segmentation, 1.1, cutoff=1)
 
 	assert len(cells) == 1
 	assert cells[1].points == set([tuple(x) for x in mask1])
@@ -38,7 +38,7 @@ def test_segmentation_to_shapes_adds_to_existing_cells():
 	mask1 = np.array([[1,2],[2,0],[2,1],[2,2]])
 
 	cells = {1:'a'}
-	segmentation_to_shapes(cells, image, threshold_segmentation, 1.1, cutoff=1, smooth=False)
+	segmentation_to_shapes(cells, threshold_segmentation, 1.1, cutoff=1)
 
 	assert len(cells) == 2
 	assert cells[1] == 'a'
@@ -53,7 +53,7 @@ def test_segmentation_to_shapes_adds_several_shapes():
 	shape2 = set([(2,0), (2,1)])
 
 	cells = {10:'a'}
-	segmentation_to_shapes(cells, image, threshold_segmentation, 1.1, cutoff=1, smooth=False)
+	segmentation_to_shapes(cells, threshold_segmentation, 1.1, cutoff=1)
 
 	assert len(cells) == 3
 	assert cells[10] == 'a'
@@ -67,6 +67,6 @@ def test_segmentation_to_shapes_kmeans_incorporation():
 	image[2,2] = 1
 
 	cells = {10:'a'}
-	segmentation_to_shapes(cells, image, kmeans_segmentation, cutoff=1, smooth=False)
+	segmentation_to_shapes(cells, kmeans_segmentation, cutoff=1)
 	assert len(cells) > 1
 	assert cells[10] == 'a'

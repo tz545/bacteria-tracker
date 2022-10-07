@@ -1,4 +1,3 @@
-import cv2
 import os
 import numpy as np 
 import torch
@@ -9,7 +8,6 @@ from torch.utils.data import Dataset, DataLoader, random_split
 import torchvision.transforms.functional as TF
 from unet import UNet
 import matplotlib.pyplot as plt
-import wandb
 
 
 class CellsDataset(Dataset):
@@ -38,13 +36,23 @@ class CellsDataset(Dataset):
 			## apply transforms and append
 
 			low_norm = TF.normalize(image, 0.0, 2)
+			low_norm = low_norm - torch.min(low_norm).item()
+			low_norm = low_norm/torch.max(low_norm).item()
+
 			high_norm = TF.normalize(image, -1, 2)
+			high_norm = high_norm - torch.min(high_norm).item()
+			high_norm = high_norm/torch.max(high_norm).item()
 
 			self.samples.append({'image': low_norm, 'mask': mask})
 			self.samples.append({'image': high_norm, 'mask': mask})
 
 			low_brightness = TF.adjust_brightness(image, 0.5) 
+			low_brightness = low_brightness - torch.min(low_brightness).item()
+			low_brightness = low_brightness/torch.max(low_brightness).item()
+
 			med_brightness = TF.adjust_brightness(image, 0.75)
+			med_brightness = med_brightness - torch.min(med_brightness).item()
+			med_brightness = med_brightness/torch.max(med_brightness).item()
 
 			self.samples.append({'image': low_brightness, 'mask': mask})
 			self.samples.append({'image': med_brightness, 'mask': mask})
@@ -61,6 +69,8 @@ class CellsDataset(Dataset):
 			## construct a set of lower-contrast data
 
 			low_contrast1 = TF.normalize(image, -10, 20)
+			low_contrast1 = low_contrast1 - torch.min(low_contrast1).item()
+			low_contrast1 = low_contrast1/torch.max(low_contrast1).item()
 			low_contrast1_hflip = TF.hflip(low_contrast1)
 			low_contrast1_vflip = TF.vflip(low_contrast1)
 
@@ -69,6 +79,8 @@ class CellsDataset(Dataset):
 			self.samples.append({'image': low_contrast1_vflip, 'mask': vertical_flip_mask})
 
 			low_contrast2 = TF.normalize(image, -5, 40)
+			low_contrast2 = low_contrast2 - torch.min(low_contrast2).item()
+			low_contrast2 = low_contrast2/torch.max(low_contrast2).item()
 			low_contrast2_hflip = TF.hflip(low_contrast2)
 			low_contrast2_vflip = TF.vflip(low_contrast2)
 
@@ -77,6 +89,8 @@ class CellsDataset(Dataset):
 			self.samples.append({'image': low_contrast2_vflip, 'mask': vertical_flip_mask})
 
 			low_contrast3 = TF.normalize(image, -30, 40)
+			low_contrast3 = low_contrast3 - torch.min(low_contrast3).item()
+			low_contrast3 = low_contrast3/torch.max(low_contrast3).item()
 			low_contrast3_hflip = TF.hflip(low_contrast3)
 			low_contrast3_vflip = TF.vflip(low_contrast3)
 
@@ -97,7 +111,7 @@ class CellsDataset(Dataset):
 
 def train_net(dataset, batch_size, epochs, learning_rate=1e-5):
 
-	no_trainng_samples = int(0.9*len(dataset.samples))
+	no_trainng_samples = int(0.8*len(dataset.samples))
 	no_val_samples = len(dataset.samples) - no_trainng_samples
 
 	trainset, valset = random_split(dataset, [no_trainng_samples, no_val_samples])
@@ -125,8 +139,6 @@ def train_net(dataset, batch_size, epochs, learning_rate=1e-5):
 			output = model(batch['image'])
 			loss = criterion(output, batch['mask'])
 
-			wandb.log({"loss": loss})
-
 			loss.backward()
 			optimizer.step()
 
@@ -148,7 +160,7 @@ def train_net(dataset, batch_size, epochs, learning_rate=1e-5):
 			print("Total validation loss: ", total_val_loss/(i+1))
 
 
-	torch.save(model.state_dict(), "models/low_contrast_{0}_epochs.pt".format(epochs))
+	torch.save(model.state_dict(), "models/low_contrast_expanded_dataset/{0}_epochs.pt".format(epochs))
 
 	return train_loss, val_loss
 
@@ -157,49 +169,17 @@ def train_net(dataset, batch_size, epochs, learning_rate=1e-5):
 
 if __name__ == "__main__":
 
-	wandb.init(project="UNet-cell-detection")
+	dataset = CellsDataset('data')
+	loader = DataLoader(dataset, batch_size=1, shuffle=True)
+	for i, batch in enumerate(loader):
+		image = batch['image']
+		image = image.squeeze()
+		mask = batch['mask']
+		mask = mask.squeeze()
 
-	wandb.config = {
-		"learning_rate": 1e-5,
-		"epochs": 50,
-		"batch_size": 128
-	}
+		plt.imshow(image)
+		plt.colorbar()
+		plt.imshow(mask, cmap="Greys", alpha=0.3)
+		plt.show()
 
-	test = True
-
-	if test:
-
-		model = UNet(1, 4)
-		model.load_state_dict(torch.load("models/low_contrast_19_epochs.pt"))
-		model.eval()
-
-		im = cv2.imread('cells_test.tif', cv2.IMREAD_UNCHANGED)
-		imarray = np.array(im.reshape(im.shape), dtype=np.float32)
-
-		assert imarray.shape[0] % 2 == 0 and imarray.shape[1] % 2 == 0, "Input image dimensions should be even."
-		quadrants = [imarray[:imarray.shape[0]//2, :imarray.shape[0]//2],\
-					imarray[imarray.shape[0]//2:, :imarray.shape[0]//2],\
-					imarray[:imarray.shape[0]//2, imarray.shape[0]//2:],\
-					imarray[imarray.shape[0]//2:, imarray.shape[0]//2:]]
-
-		for q in range(len(quadrants)):
-			# plt.imshow(quadrants[q])
-			img_blur = cv2.GaussianBlur(quadrants[q],(3,3), sigmaX=10, sigmaY=10)
-
-			image = torch.from_numpy(img_blur)
-
-			image = image.float()
-			image = image/np.max(img_blur) # normalize input values to between 0 and 1
-			image = torch.unsqueeze(image, 0)
-			image = torch.unsqueeze(image, 0)
-
-			mask = torch.argmax(model(image), dim=1)
-			print(mask.shape)
-
-			plt.imshow(mask.squeeze().detach().numpy(), cmap='binary', alpha=0.3)
-			plt.show()
-
-	else:
-
-		dataset = CellsDataset('data')
-		train_net(dataset, batch_size=1, epochs=19)
+	

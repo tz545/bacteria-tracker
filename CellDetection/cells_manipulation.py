@@ -7,14 +7,11 @@ from boundary_edges import alpha_shape, stitch_boundaries
 
 class Shape():
 
-	def __init__(self, points, im, smooth=False):
-		self.im = im # original grayscale values for further segmentation if needed
-		self.imshape = im.shape # size of original image
-		if smooth:
-			self.points = self.smooth_shape(points) # set of pixel indices (corresponding to original image) within Shape
-		else:
-			self.points = points
+	def __init__(self, points):
+
+		self.points = points # set of pixel indices (corresponding to original image) within Shape
 		self._boundary = None
+		self.center = np.mean(np.array(list(self.points)), axis=0)
 		self.size = len(self.points) # can consider automatic thresholding of sizes
 		if self.size < 10:
 			print("Small size detected! ", self.size)
@@ -39,28 +36,13 @@ class Shape():
 		boundary_polygon.append(points_array[boundary_list[0][-1][1]])
 			
 		self._boundary = np.array(boundary_polygon)
-
-	def smooth_shape(self, points):
-		## we want to fill in small holes and get rid of rough edges
 		
-		## convert indices list to matrix
-		points_array = np.array(list(points))
-		row = points_array[:,0]
-		col = points_array[:,1]
 
-		mask = np.zeros(self.imshape, dtype=int)
-		mask[row,col] = 1
+	def to_dict(self):
+		print(self.points)
+		print(list(self.points))
+		return {'points': list(self.points), 'boundary': self.boundary.tolist(), 'center': list(self.center), 'size': self.size}
 
-		## do dilation followed by erosion
-		kernel = np.ones([3,3], dtype=int)
-		dilation = binary_dilation(mask, kernel).astype(int)
-		erosion = binary_erosion(dilation, kernel).astype(int)
-
-		pixels = np.argwhere(erosion==1)
-		pixels_set = set([tuple(x) for x in pixels])
-
-		return pixels_set
-		
 
 class CellSplitter:
 	"""Interactive interface for deleting and selecting cells on Matplotlib figure.
@@ -150,7 +132,7 @@ class CellSplitter:
 							new_shape.add((point[0]+i, point[1]+j))
 
 		new_key = max(self.cells.keys())+1
-		self.cells[new_key] = Shape(new_shape, self.image, smooth=False)
+		self.cells[new_key] = Shape(new_shape)
 		edges = self.cells[new_key].boundary
 		self.cell_id_to_lines[new_key], = self.axes.plot(edges[:,1], edges[:,0], c='k')
 		
@@ -167,7 +149,7 @@ class CellSplitter:
 		self.fig.canvas.mpl_disconnect(self.cidmotion)
 
 
-def mask_to_cells(image, mask, min_cutoff=100, max_cutoff=10000):
+def mask_to_cells(mask, min_cutoff=100, max_cutoff=10000, return_dict=False):
 	"""This function converts all groups of connected pixels in a mask (between the cutoff sizes) 
 	into Shape objects and stores them within a dictionary.
 	mask: integer numpy array of same size as image, with value corresponding to the number of shapes present at pixel location"""
@@ -226,7 +208,10 @@ def mask_to_cells(image, mask, min_cutoff=100, max_cutoff=10000):
 	cells = {}
 
 	for s in new_shapes_list:
-		cells[len(cells)+1] = Shape(s, image, smooth=False)
+		if return_dict:
+			cells[len(cells)+1] = Shape(s).to_dict()
+		else:
+			cells[len(cells)+1] = Shape(s)
 
 	return cells
 
@@ -327,4 +312,4 @@ def correct_masks(data_file):
 
 if __name__ == "__main__":
 	
-	correct_masks("data/cell_7.npy")
+	correct_masks("data/cell_9.npy")
