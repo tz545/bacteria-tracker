@@ -39,8 +39,8 @@ class Shape():
 		
 
 	def to_dict(self):
-		print(self.points)
-		print(list(self.points))
+		# print(self.points)
+		# print(list(self.points))
 		return {'points': list(self.points), 'boundary': self.boundary.tolist(), 'center': list(self.center), 'size': self.size}
 
 
