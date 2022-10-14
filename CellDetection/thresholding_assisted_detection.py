@@ -47,7 +47,7 @@ def threshold_segmentation(image, threshold, points=None):
 		return points_array[binary_mask==1]
 
 
-def segmentation_to_shapes(cells, segmentation_function, *threshold, points=None, cutoff=4):
+def segmentation_to_shapes(image, cells, segmentation_function, *threshold, points=None, cutoff=4):
 	"""Either an identified region needs to be split into multiple cells
 	or an unselected region contains cells that need to be segmented
 	image: 2D numpy array of pixel values
