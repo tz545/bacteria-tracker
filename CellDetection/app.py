@@ -5,10 +5,10 @@ from dash import Dash, html, dcc, Input, Output, State, ctx
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
-import cv2
 import torch
 import pandas as pd
 from scipy.spatial import Delaunay
+from skimage import io
 
 from unet import UNet
 from cells_manipulation import Shape, mask_to_cells
@@ -24,9 +24,7 @@ app.layout = html.Div(children=[
     html.H3(children='Cell Detection'),
 
     html.Div([
-        dcc.Upload(
-        id='upload-image',
-        children=html.Div([
+        dcc.Upload(id='upload-image', children=html.Div([
             html.A('Select Image')
         ]),
         style={
@@ -41,27 +39,34 @@ app.layout = html.Div(children=[
         },
         # Allow multiple files to be uploaded
         multiple=False
-    ),
-    html.H4(children="Select model:"),
-    dcc.Dropdown(
-        models_df['Description'].unique(),
-        "None",
-        id='model-choice'
-            )
+    )
             ], style={'width': '48%', 'display': 'inline-block'}),
 
-    dcc.Graph(
-        id='cell-segmentation'
-    ),
+    html.Div(children=[
+        html.Div(children=[html.H4(children="Select model:"),
+            dcc.Dropdown(models_df['Description'].unique(), "None", id='model-choice-1'),
+            dcc.Graph(id="cell-segmentation-1")],style={'width': '40%','display': 'inline-block'}),
+        html.Div(children=[html.H4(children="Select model:"),
+            dcc.Dropdown(models_df['Description'].unique(), "None", id='model-choice-2'),
+            dcc.Graph(id="cell-segmentation-2")], style={"margin-left": "150px",'width': '40%','display': 'inline-block'})
+    ]),
+    html.Div([
+        "Image Stack Number: ",
+        dcc.Input(id='image-stack-no', value=0, type='number')
+    ], style={"margin-left": "150px",'width': '40%','display': 'inline-block'}),
     dcc.Store(id='raw-image'), 
-    dcc.Store(id='cells')
+    dcc.Store(id='cells-1'),
+    dcc.Store(id='cells-2')
 ])
 
 def process_image(image_file):
 
-    im = cv2.imread(image_file, cv2.IMREAD_UNCHANGED)
-    imarray = np.array(im.reshape(im.shape), dtype=np.float32)
-    quadrant = imarray[:imarray.shape[0]//4, :imarray.shape[0]//4]
+    im = io.imread(image_file)
+    im = im.astype(np.float32)
+
+    ## take the middle quarter of images across all stacks
+    ## (this cut is made because I have not figured out a good way of zooming in online)
+    quadrant = im[:,im.shape[1]//4:im.shape[1]//2,im.shape[2]//4:im.shape[2]//2]
     quadrant = quadrant - np.min(quadrant)
     quadrant = quadrant/np.max(quadrant)
 
@@ -117,36 +122,12 @@ def remove_cell(cells, mouse_click):
     return cells
 
 
-@app.callback(
-    Output('raw-image', 'data'),
-    Input('upload-image', 'filename')
-    )
-def update_image(image_file_name):
-    if image_file_name == None:
-        image_file_name = "PA_vipA_mnG_30x30_32x32_100nN_100uNs_1s_1_GFP-1.tif"
-
-    image_file_name = 'cells_images/' + image_file_name
-    image = process_image(image_file_name)
-    image_list = image.tolist()
-    return {
-        'image': image
-    }
-
-
-@app.callback(
-    Output('cells', 'data'),
-    Input('model-choice', 'value'),
-    Input('cell-segmentation', 'clickData'),
-    Input('cell-segmentation', 'selectedData'),
-    State('raw-image', 'data'),
-    State('cells', 'data'), prevent_initial_call=True
-    )
-def update_cells(model_file_name, mouse_click, lasso_select, raw_image, cells):
+def general_update_cells(model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells, model_choice_id):
 
     raw_image = np.array(raw_image['image'], dtype=np.float32)
-        
+    raw_image = raw_image[stack_no]
 
-    if ctx.triggered_id is None or ctx.triggered_id == "model-choice":
+    if ctx.triggered_id is None or ctx.triggered_id == model_choice_id or ctx.triggered_id == "image-stack-no":
         if model_file_name is not None:
             model_file = models_df[models_df['Description']==model_file_name].iloc[0].File
 
@@ -175,21 +156,15 @@ def update_cells(model_file_name, mouse_click, lasso_select, raw_image, cells):
     return cells
 
 
-@app.callback(
-    Output('cell-segmentation', 'figure'),
-    Input('raw-image', 'data'),
-    Input('cells', 'data'),
-    State('cell-segmentation', 'figure')
-    )
-def update_figure(raw_image, cells, fig):
+def general_update_figure(raw_image, stack_no, cells, fig):
 
     raw_image = np.array(raw_image['image'], dtype=np.float32)
-    fig = px.imshow(raw_image,color_continuous_scale='gray', width=800, height=800) #color_continuous_scale='gray',
+    raw_image = raw_image[stack_no]
+
+    fig = px.imshow(raw_image,color_continuous_scale='gray', width=700, height=700) #color_continuous_scale='gray',
     fig.layout.coloraxis.showscale = False
 
-    if ctx.triggered_id is None or ctx.triggered_id == "cells":
-
-        # print(fig)
+    if cells is not None:
 
         for c in cells.keys():
             edges = np.array(cells[c]['boundary'])
@@ -198,6 +173,74 @@ def update_figure(raw_image, cells, fig):
             fig.add_trace(go.Scatter(x=[cells[c]['center'][1]], y=[cells[c]['center'][0]], mode='markers', name='cell{0}'.format(c), marker={'color':'rgb(255,255,255)', 'size':4}, showlegend=False))
 
     return fig
+
+
+@app.callback(
+    Output('raw-image', 'data'),
+    Input('upload-image', 'filename')
+    )
+def update_image(image_file_name):
+    if image_file_name == None:
+        image_file_name = "PA_vipA_mnG_15nN_20x20_16x16_1S_10ums_8_GFP-1-small.tif"
+
+    image_file_name = 'cells_images/' + image_file_name
+    image = process_image(image_file_name)
+    image_list = image.tolist()
+    return {
+        'image': image
+    }
+
+
+@app.callback(
+    Output('cells-1', 'data'),
+    Input('model-choice-1', 'value'),
+    Input('cell-segmentation-1', 'clickData'),
+    Input('cell-segmentation-1', 'selectedData'),
+    Input('image-stack-no', 'value'),
+    State('raw-image', 'data'),
+    State('cells-1', 'data'), prevent_initial_call=True
+    )
+def update_cells_1(model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells):
+
+    return general_update_cells(model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells, "model-choice-1")
+
+
+@app.callback(
+    Output('cell-segmentation-1', 'figure'),
+    Input('raw-image', 'data'),
+    Input('image-stack-no', 'value'),
+    Input('cells-1', 'data'),
+    State('cell-segmentation-1', 'figure')
+    )
+def update_figure_1(raw_image, stack_no, cells, fig):
+
+    return general_update_figure(raw_image, stack_no, cells, fig)
+    
+
+@app.callback(
+    Output('cells-2', 'data'),
+    Input('model-choice-2', 'value'),
+    Input('cell-segmentation-2', 'clickData'),
+    Input('cell-segmentation-2', 'selectedData'),
+    Input('image-stack-no', 'value'),
+    State('raw-image', 'data'),
+    State('cells-2', 'data'), prevent_initial_call=True
+    )
+def update_cells_2(model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells):
+
+    return general_update_cells(model_file_name, mouse_click, lasso_select, stack_no+1, raw_image, cells, "model-choice-2")
+
+
+@app.callback(
+    Output('cell-segmentation-2', 'figure'),
+    Input('raw-image', 'data'),
+    Input('image-stack-no', 'value'),
+    Input('cells-2', 'data'),
+    State('cell-segmentation-2', 'figure')
+    )
+def update_figure_2(raw_image, stack_no, cells, fig):
+
+    return general_update_figure(raw_image, stack_no+1, cells, fig)
 
 
 if __name__ == '__main__':
