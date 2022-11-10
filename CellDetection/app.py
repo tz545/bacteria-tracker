@@ -4,14 +4,10 @@
 from dash import Dash, html, dcc, Input, Output, State, ctx
 import plotly.express as px
 import plotly.graph_objects as go
-import numpy as np
-import torch
 import pandas as pd
-from scipy.spatial import Delaunay
-from skimage import io
+import json
 
-from unet import UNet
-from cells_manipulation import Shape, mask_to_cells
+from processing_functions import *
 
 app = Dash(__name__)
 
@@ -44,96 +40,44 @@ app.layout = html.Div(children=[
 
     html.Div(children=[
         html.Div(children=[html.H4(children="Select model:"),
-            dcc.Dropdown(models_df['Description'].unique(), "None", id='model-choice-1'),
+            dcc.Dropdown(models_df['Description'].unique(), "High Sensitivity", id='model-choice-1'),
             dcc.Graph(id="cell-segmentation-1")],style={'width': '40%','display': 'inline-block'}),
         html.Div(children=[html.H4(children="Select model:"),
-            dcc.Dropdown(models_df['Description'].unique(), "None", id='model-choice-2'),
+            dcc.Dropdown(models_df['Description'].unique(), "High Sensitivity", id='model-choice-2'),
             dcc.Graph(id="cell-segmentation-2")], style={"margin-left": "150px",'width': '40%','display': 'inline-block'})
     ]),
-    html.Div([
-        "Image Stack Number: ",
-        dcc.Input(id='image-stack-no', value=0, type='number')
-    ], style={"margin-left": "150px",'width': '40%','display': 'inline-block'}),
+    html.Div(children=[html.Div(id='image-stack-no-display-1', style={"margin-left": "150px",'display': 'inline-block'}),
+                    html.Div(id='image-stack-no-display-2', style={"margin-left": "600px",'display': 'inline-block'})]),
+
+    html.Br(),
+    html.Div(children=[
+        html.Button(id='button-prev', n_clicks=0, children='Previous'),
+        html.Button(id='button-save', n_clicks=0, children='Track cells in next frame'),
+        html.Button(id='button-next', n_clicks=0, children='Next'),
+        html.Div([html.Button("Save cells", id="btn-download-cells"), dcc.Download(id="download-cells")])
+        ], style={"margin-left": "150px",'display': 'inline-block'}),
+
     dcc.Store(id='raw-image'), 
-    dcc.Store(id='cells-1'),
-    dcc.Store(id='cells-2')
+    dcc.Store(id='num-frames'), 
+    dcc.Store(id='cells', storage_type='session'),
+    dcc.Store(id='image-stack-no', data=0, storage_type='memory'),
+    dcc.Store(id='temp-cells-1', storage_type='local'),
+    dcc.Store(id='temp-cells-2', storage_type='session')
 ])
 
-def process_image(image_file):
 
-    im = io.imread(image_file)
-    im = im.astype(np.float32)
+def general_update_cells(trig, model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells, model_choice_id):
 
-    ## take the middle quarter of images across all stacks
-    ## (this cut is made because I have not figured out a good way of zooming in online)
-    quadrant = im[:,im.shape[1]//4:im.shape[1]//2,im.shape[2]//4:im.shape[2]//2]
-    quadrant = quadrant - np.min(quadrant)
-    quadrant = quadrant/np.max(quadrant)
-
-    return quadrant
-
-
-def in_hull(p, hull):
-    """
-    https://stackoverflow.com/questions/16750618/whats-an-efficient-way-to-find-if-a-point-lies-in-the-convex-hull-of-a-point-cl#:~:text=First%2C%20obtain%20the%20convex%20hull,clockwise%20around%20the%20convex%20hull.
-    Test if points in `p` are in `hull`
-
-    `p` should be a `NxK` coordinates of `N` points in `K` dimensions
-    `hull` is either a scipy.spatial.Delaunay object or the `MxK` array of the 
-    coordinates of `M` points in `K`dimensions for which Delaunay triangulation
-    will be computed
-    """
-    if not isinstance(hull,Delaunay):
-        hull = Delaunay(hull)
-
-    return hull.find_simplex(p)>=0
-
-
-def add_cell(cells, fig_shape, lasso_select):
-
-    lasso_dict = lasso_select['lassoPoints']
-    lasso_points = np.column_stack([np.array(lasso_dict['y']), np.array(lasso_dict['x'])])
-    
-    ## check all pixels in rectangle bounding selection to see if they are within selection
-    bottom_left = np.floor(np.min(lasso_points, axis=0)).astype(int)
-    upper_right = np.ceil(np.max(lasso_points, axis=0)).astype(int)
-    x_range = np.arange(max(0,bottom_left[0]), min(upper_right[0], fig_shape[0]))
-    y_range = np.arange(max(0,bottom_left[1]), min(upper_right[1], fig_shape[1]))
-    X, Y = np.meshgrid(x_range, y_range)
-    pixel_grid_points = np.column_stack([X.ravel(), Y.ravel()])
-
-    pixels_in_selection = in_hull(pixel_grid_points, lasso_points)
-    new_shape = pixel_grid_points[pixels_in_selection==True]
-    cells[max(cells.keys())+1] = Shape(set([tuple(x) for x in new_shape])).to_dict()
-
-    return cells
-
-
-def remove_cell(cells, mouse_click):
-    point = mouse_click['points'][0]
-    row = int(np.rint(point['y']))
-    col = int(np.rint(point['x']))
-
-    for c in cells.keys():
-        if [row, col] in cells[c]['points']:
-            cells.pop(c)
-            break
-
-    return cells
-
-
-def general_update_cells(model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells, model_choice_id):
-
-    raw_image = np.array(raw_image['image'], dtype=np.float32)
-    raw_image = raw_image[stack_no]
-
-    if ctx.triggered_id is None or ctx.triggered_id == model_choice_id or ctx.triggered_id == "image-stack-no":
+    if trig == model_choice_id or trig == 'button-next':
         if model_file_name is not None:
             model_file = models_df[models_df['Description']==model_file_name].iloc[0].File
 
             model = UNet(1, 4)
             model.load_state_dict(torch.load(model_file, map_location=torch.device('cpu')))
             model.eval()
+
+        raw_image = np.array(raw_image['image'], dtype=np.float32)
+        raw_image = raw_image[stack_no]
 
         image = torch.from_numpy(raw_image)
         image = torch.unsqueeze(image, 0)
@@ -146,12 +90,21 @@ def general_update_cells(model_file_name, mouse_click, lasso_select, stack_no, r
 
     if mouse_click is not None:
 
-        cells = remove_cell(cells, mouse_click)
+        result = remove_cell(cells, mouse_click)
+        if result is not None:
+            print("cell deleted")
+            cells = result
 
     if lasso_select is not None:
+
+        raw_image = np.array(raw_image['image'], dtype=np.float32)
+        raw_image = raw_image[stack_no]
+
         if 'lassoPoints' in lasso_select:
             cells = {int(k):v for k,v in cells.items()}
             cells = add_cell(cells, raw_image.shape, lasso_select)
+
+            print("cell added")
 
     return cells
 
@@ -177,6 +130,7 @@ def general_update_figure(raw_image, stack_no, cells, fig):
 
 @app.callback(
     Output('raw-image', 'data'),
+    Output('num-frames', 'data'),
     Input('upload-image', 'filename')
     )
 def update_image(image_file_name):
@@ -186,30 +140,92 @@ def update_image(image_file_name):
     image_file_name = 'cells_images/' + image_file_name
     image = process_image(image_file_name)
     image_list = image.tolist()
-    return {
-        'image': image
-    }
+    return {'image': image, 'frames':len(image)}, len(image)
 
 
 @app.callback(
-    Output('cells-1', 'data'),
+    Output('image-stack-no-display-1', 'children'),
+    Input('image-stack-no', 'data'), 
+    Input('num-frames', 'data')
+    )
+def update_frame_no_display_1(stack_no, num_frames):
+    return 'Image Frame Number: {0}/{1}'.format(stack_no, num_frames-1)
+
+
+@app.callback(
+    Output('image-stack-no-display-2', 'children'),
+    Input('image-stack-no', 'data'), 
+    Input('num-frames', 'data')
+    )
+def update_frame_no_display_2(stack_no, num_frames):
+    return 'Image Frame Number: {0}/{1}'.format(stack_no+1, num_frames-1)
+
+
+@app.callback(
+    Output('image-stack-no', 'data'),
+    Input('button-prev', 'n_clicks'),
+    Input('button-next', 'n_clicks'),
+    State('image-stack-no', 'data'),
+    State('num-frames', 'data'), prevent_initial_call=True
+    )
+def update_frame_number(next, prev, stack_no, num_frames):
+    ## check if at the end of the stack, if so, give save file option
+    if ctx.triggered_id == 'button-next' and stack_no <= num_frames-3:
+        return stack_no + 1
+
+    elif ctx.triggered_id == 'button-prev' and stack_no >= 1:
+        return stack_no - 1
+
+    else:
+        return stack_no
+
+
+@app.callback(
+    Output("download-cells", "data"),
+    Input("btn-download-cells", "n_clicks"),
+    State('cells', 'data'), prevent_initial_call=True,
+)
+def download(n_clicks, cells):
+    return dict(content=json.dumps(cells), filename="cells.txt")
+
+
+@app.callback(
+    Output('temp-cells-1', 'data'),
     Input('model-choice-1', 'value'),
     Input('cell-segmentation-1', 'clickData'),
     Input('cell-segmentation-1', 'selectedData'),
-    Input('image-stack-no', 'value'),
+    Input('button-prev', 'n_clicks'),
+    Input('button-next', 'n_clicks'),
+    State('image-stack-no', 'data'),
     State('raw-image', 'data'),
-    State('cells-1', 'data'), prevent_initial_call=True
+    State('temp-cells-1', 'data'),
+    State('temp-cells-2', 'data'),
+    State('cells', 'data'), prevent_initial_call=True
     )
-def update_cells_1(model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells):
+def update_cells_1(model_file_name, mouse_click, lasso_select, n_prev, n_next, stack_no, raw_image, cells1, cells2, saved_cells):
 
-    return general_update_cells(model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells, "model-choice-1")
+    ## check here as well if end of stack reached
+    if ctx.triggered_id == 'button-next':
+        if stack_no >= raw_image['frames'] - 2:
+            return cells1
+        else:
+            return cells2
+
+    elif ctx.triggered_id == 'button-prev':
+        if stack_no >= 1:
+            return saved_cells[str(stack_no-1)]
+        else: 
+            return cells1
+
+    else:
+        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells1, "model-choice-1")
 
 
 @app.callback(
     Output('cell-segmentation-1', 'figure'),
     Input('raw-image', 'data'),
-    Input('image-stack-no', 'value'),
-    Input('cells-1', 'data'),
+    Input('image-stack-no', 'data'),
+    Input('temp-cells-1', 'data'),
     State('cell-segmentation-1', 'figure')
     )
 def update_figure_1(raw_image, stack_no, cells, fig):
@@ -218,29 +234,73 @@ def update_figure_1(raw_image, stack_no, cells, fig):
     
 
 @app.callback(
-    Output('cells-2', 'data'),
+    Output('temp-cells-2', 'data'),
     Input('model-choice-2', 'value'),
     Input('cell-segmentation-2', 'clickData'),
     Input('cell-segmentation-2', 'selectedData'),
-    Input('image-stack-no', 'value'),
+    Input('button-prev', 'n_clicks'),
+    Input('button-save', 'n_clicks'),
+    Input('button-next', 'n_clicks'),
+    State('image-stack-no', 'data'),
     State('raw-image', 'data'),
-    State('cells-2', 'data'), prevent_initial_call=True
+    State('temp-cells-1', 'data'),
+    State('temp-cells-2', 'data'),
+    State('cells', 'data'), prevent_initial_call=True
     )
-def update_cells_2(model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells):
+def update_cells_2(model_file_name, mouse_click, lasso_select, n_prev, n_save, n_next, stack_no, raw_image, cells1, cells2, saved_cells):
 
-    return general_update_cells(model_file_name, mouse_click, lasso_select, stack_no+1, raw_image, cells, "model-choice-2")
+    if ctx.triggered_id == 'button-save':
+        ## propagate cells from first frame onto second frame
+        return forward_prop_cells(cells1, cells2)
+
+    elif ctx.triggered_id == 'button-prev':
+        if stack_no >= 1:
+            return cells1
+        else:
+            return cells2
+
+    elif ctx.triggered_id == 'button-next' and stack_no+1 in saved_cells.keys():
+        return saved_cells[str(stack_no+1)]
+
+    elif ctx.triggered_id == 'button-next' and stack_no >= raw_image['frames'] - 2:
+        return cells2
+
+    else:
+        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, stack_no+1, raw_image, cells2, "model-choice-2")
 
 
 @app.callback(
     Output('cell-segmentation-2', 'figure'),
     Input('raw-image', 'data'),
-    Input('image-stack-no', 'value'),
-    Input('cells-2', 'data'),
+    Input('image-stack-no', 'data'),
+    Input('temp-cells-2', 'data'),
     State('cell-segmentation-2', 'figure')
     )
 def update_figure_2(raw_image, stack_no, cells, fig):
 
     return general_update_figure(raw_image, stack_no+1, cells, fig)
+
+
+@app.callback(
+    Output('cells', 'data'),
+    Input('button-save', 'n_clicks'),
+    Input('button-next', 'n_clicks'),
+    State('temp-cells-1', 'data'),
+    State('temp-cells-2', 'data'),
+    State('image-stack-no', 'data'),
+    State('cells', 'data'), prevent_initial_call=True
+    )
+def save_cells(n_save, n_next, temp_cells1, temp_cells2, stack_no, cells):
+    
+    if ctx.triggered_id == 'button-save':
+        if stack_no == 0:
+            cells = {}
+        cells[stack_no] = temp_cells1
+
+    elif ctx.triggered_id == 'button-next':
+        cells[stack_no+1] = temp_cells2
+
+    return cells
 
 
 if __name__ == '__main__':

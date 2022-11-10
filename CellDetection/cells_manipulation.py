@@ -181,7 +181,6 @@ def mask_to_cells(mask, min_cutoff=100, max_cutoff=10000, return_dict=False):
 
 		while len(BFS_queue) > 0:
 
-
 			pixel = BFS_queue.popleft()
 			new_shape.add(pixel)
 
