@@ -52,9 +52,10 @@ def add_cell(cells, fig_shape, lasso_select):
 
     pixels_in_selection = in_hull(pixel_grid_points, lasso_points)
     new_shape = pixel_grid_points[pixels_in_selection==True]
-    cells[max(cells.keys())+1] = Shape(set([tuple(x) for x in new_shape])).to_dict()
+    new_no = max(cells.keys())+1
+    cells[new_no] = Shape(set([tuple(x) for x in new_shape])).to_dict()
 
-    return cells
+    return cells, new_no
 
 
 def remove_cell(cells, mouse_click):
@@ -65,7 +66,7 @@ def remove_cell(cells, mouse_click):
     for c in cells.keys():
         if [row, col] in cells[c]['points']:
             cells.pop(c)
-            return cells
+            return cells, c
 
     return None
 

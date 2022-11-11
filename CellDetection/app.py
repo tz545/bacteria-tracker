@@ -62,11 +62,13 @@ app.layout = html.Div(children=[
     dcc.Store(id='cells', storage_type='session'),
     dcc.Store(id='image-stack-no', data=0, storage_type='memory'),
     dcc.Store(id='temp-cells-1', storage_type='local'),
-    dcc.Store(id='temp-cells-2', storage_type='session')
+    dcc.Store(id='temp-cells-2', storage_type='session'), 
+    dcc.Store(id='last-mouse-click-1', storage_type='memory'),
+    dcc.Store(id='last-mouse-click-2', storage_type='memory')
 ])
 
 
-def general_update_cells(trig, model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells, model_choice_id):
+def general_update_cells(trig, model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells, model_choice_id, last_click):
 
     if trig == model_choice_id or trig == 'button-next':
         if model_file_name is not None:
@@ -88,25 +90,33 @@ def general_update_cells(trig, model_file_name, mouse_click, lasso_select, stack
 
         cells = mask_to_cells(mask, return_dict=True)
 
-    if mouse_click is not None:
-
-        result = remove_cell(cells, mouse_click)
-        if result is not None:
-            print("cell deleted")
-            cells = result
+        return cells, last_click
 
     if lasso_select is not None:
 
-        raw_image = np.array(raw_image['image'], dtype=np.float32)
-        raw_image = raw_image[stack_no]
-
         if 'lassoPoints' in lasso_select:
+
+            raw_image = np.array(raw_image['image'], dtype=np.float32)
+            raw_image = raw_image[stack_no]
+
             cells = {int(k):v for k,v in cells.items()}
-            cells = add_cell(cells, raw_image.shape, lasso_select)
+            cells, no = add_cell(cells, raw_image.shape, lasso_select)
+            print("cell {0} added".format(no), flush=True)
 
-            print("cell added")
+            return cells, last_click
 
-    return cells
+    if mouse_click is not None:
+
+        if mouse_click != last_click:
+
+            result = remove_cell(cells, mouse_click)
+            if result is not None:
+                cells, no = result
+                print("cell {0} deleted".format(no), flush=True)
+
+            last_click = mouse_click
+
+    return cells, last_click
 
 
 def general_update_figure(raw_image, stack_no, cells, fig):
@@ -191,6 +201,7 @@ def download(n_clicks, cells):
 
 @app.callback(
     Output('temp-cells-1', 'data'),
+    Output('last-mouse-click-1', 'data'),
     Input('model-choice-1', 'value'),
     Input('cell-segmentation-1', 'clickData'),
     Input('cell-segmentation-1', 'selectedData'),
@@ -200,25 +211,26 @@ def download(n_clicks, cells):
     State('raw-image', 'data'),
     State('temp-cells-1', 'data'),
     State('temp-cells-2', 'data'),
-    State('cells', 'data'), prevent_initial_call=True
+    State('cells', 'data'),
+    State('last-mouse-click-1', 'data'), prevent_initial_call=True
     )
-def update_cells_1(model_file_name, mouse_click, lasso_select, n_prev, n_next, stack_no, raw_image, cells1, cells2, saved_cells):
+def update_cells_1(model_file_name, mouse_click, lasso_select, n_prev, n_next, stack_no, raw_image, cells1, cells2, saved_cells, last_click):
 
-    ## check here as well if end of stack reached
+    print(ctx.triggered_id, mouse_click, lasso_select, flush=True)
     if ctx.triggered_id == 'button-next':
         if stack_no >= raw_image['frames'] - 2:
-            return cells1
+            return cells1, last_click
         else:
-            return cells2
+            return cells2, last_click
 
     elif ctx.triggered_id == 'button-prev':
         if stack_no >= 1:
-            return saved_cells[str(stack_no-1)]
+            return saved_cells[str(stack_no-1)], last_click
         else: 
-            return cells1
+            return cells1, last_click
 
     else:
-        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells1, "model-choice-1")
+        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells1, "model-choice-1", last_click)
 
 
 @app.callback(
@@ -235,6 +247,7 @@ def update_figure_1(raw_image, stack_no, cells, fig):
 
 @app.callback(
     Output('temp-cells-2', 'data'),
+    Output('last-mouse-click-2', 'data'),
     Input('model-choice-2', 'value'),
     Input('cell-segmentation-2', 'clickData'),
     Input('cell-segmentation-2', 'selectedData'),
@@ -245,29 +258,29 @@ def update_figure_1(raw_image, stack_no, cells, fig):
     State('raw-image', 'data'),
     State('temp-cells-1', 'data'),
     State('temp-cells-2', 'data'),
-    State('cells', 'data'), prevent_initial_call=True
+    State('cells', 'data'), 
+    State('last-mouse-click-2', 'data'), prevent_initial_call=True
     )
-def update_cells_2(model_file_name, mouse_click, lasso_select, n_prev, n_save, n_next, stack_no, raw_image, cells1, cells2, saved_cells):
+def update_cells_2(model_file_name, mouse_click, lasso_select, n_prev, n_save, n_next, stack_no, raw_image, cells1, cells2, saved_cells, last_click):
 
     if ctx.triggered_id == 'button-save':
         ## propagate cells from first frame onto second frame
-        return forward_prop_cells(cells1, cells2)
+        return forward_prop_cells(cells1, cells2), last_click
 
     elif ctx.triggered_id == 'button-prev':
         if stack_no >= 1:
-            return cells1
+            return cells1, last_click
         else:
-            return cells2
+            return cells2, last_click
 
     elif ctx.triggered_id == 'button-next' and stack_no+1 in saved_cells.keys():
-        return saved_cells[str(stack_no+1)]
+        return saved_cells[str(stack_no+1)], last_click
 
     elif ctx.triggered_id == 'button-next' and stack_no >= raw_image['frames'] - 2:
-        return cells2
+        return cells2, last_click
 
     else:
-        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, stack_no+1, raw_image, cells2, "model-choice-2")
-
+        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, stack_no+1, raw_image, cells2, "model-choice-2", last_click)
 
 @app.callback(
     Output('cell-segmentation-2', 'figure'),
