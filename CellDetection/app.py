@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import pandas as pd
 import json
 
-from processing_functions import *
+from app_functions import *
 
 app = Dash(__name__)
 
@@ -101,7 +101,7 @@ def general_update_cells(trig, model_file_name, mouse_click, lasso_select, stack
 
             cells = {int(k):v for k,v in cells.items()}
             cells, no = add_cell(cells, raw_image.shape, lasso_select)
-            print("cell {0} added".format(no), flush=True)
+            # print("cell {0} added".format(no), flush=True)
 
             return cells, last_click
 
@@ -112,7 +112,7 @@ def general_update_cells(trig, model_file_name, mouse_click, lasso_select, stack
             result = remove_cell(cells, mouse_click)
             if result is not None:
                 cells, no = result
-                print("cell {0} deleted".format(no), flush=True)
+                # print("cell {0} deleted".format(no), flush=True)
 
             last_click = mouse_click
 
@@ -216,7 +216,7 @@ def download(n_clicks, cells):
     )
 def update_cells_1(model_file_name, mouse_click, lasso_select, n_prev, n_next, stack_no, raw_image, cells1, cells2, saved_cells, last_click):
 
-    print(ctx.triggered_id, mouse_click, lasso_select, flush=True)
+    # print(ctx.triggered_id, mouse_click, lasso_select, flush=True)
     if ctx.triggered_id == 'button-next':
         if stack_no >= raw_image['frames'] - 2:
             return cells1, last_click
