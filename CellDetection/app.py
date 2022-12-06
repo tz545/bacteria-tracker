@@ -193,10 +193,35 @@ def update_frame_number(next, prev, stack_no, num_frames):
 @app.callback(
     Output("download-cells", "data"),
     Input("btn-download-cells", "n_clicks"),
-    State('cells', 'data'), prevent_initial_call=True,
+    State('cells', 'data'),
+    State('raw-image', 'data'),  prevent_initial_call=True,
 )
-def download(n_clicks, cells):
-    return dict(content=json.dumps(cells), filename="cells.txt")
+def download(n_clicks, cells, raw_image):
+    """saves cell boundaries, and compute and save average and max intensity"""
+
+    raw_image = np.array(raw_image['image'], dtype=np.float32)
+
+    file_info = {}
+
+    ## need to iterate through each stack of images and cells
+    for stack in range(len(cells)):
+        raw_image_slice = raw_image[stack]
+        cell_slice = cells[str(stack)]
+
+        ## re-number cells so cell numbers are consecutive
+        cell_indices = [int(k) for k in cell_slice.keys()]
+        sorted_indices = np.sort(cell_indices)
+        cell_map = dict(zip(sorted_indices, np.arange(len(sorted_indices))))
+
+        new_cells = {}
+        for k,v in cell_slice.items():
+            points_array = np.array(cell_slice[k]['points'])
+            im_vals = raw_image_slice[points_array[:,0], points_array[:,1]]
+            new_cells[int(cell_map[int(k)])] = {'boundary':v['boundary'], 'max_intensity':float(np.max(im_vals)), 'ave_intensity':float(np.mean(im_vals))}
+
+        file_info[stack] = new_cells
+
+    return dict(content=json.dumps(file_info), filename="cells.txt")
 
 
 @app.callback(
@@ -297,21 +322,19 @@ def update_figure_2(raw_image, stack_no, cells, fig):
 @app.callback(
     Output('cells', 'data'),
     Input('button-save', 'n_clicks'),
-    Input('button-next', 'n_clicks'),
     State('temp-cells-1', 'data'),
     State('temp-cells-2', 'data'),
     State('image-stack-no', 'data'),
     State('cells', 'data'), prevent_initial_call=True
     )
-def save_cells(n_save, n_next, temp_cells1, temp_cells2, stack_no, cells):
+def save_cells(n_save, temp_cells1, temp_cells2, stack_no, cells):
     
-    if ctx.triggered_id == 'button-save':
-        if stack_no == 0:
-            cells = {}
-        cells[stack_no] = temp_cells1
+    if stack_no == 0:
+        cells = {}
+    cells[str(stack_no)] = temp_cells1
+    cells[str(stack_no+1)] = temp_cells2
 
-    elif ctx.triggered_id == 'button-next':
-        cells[stack_no+1] = temp_cells2
+    print(cells.keys(), flush=True)
 
     return cells
 
