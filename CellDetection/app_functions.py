@@ -12,13 +12,10 @@ def process_image(image_file):
     im = io.imread(image_file)
     im = im.astype(np.float32)
 
-    ## take the middle quarter of images across all stacks
-    ## (this cut is made because I have not figured out a good way of zooming in online)
-    quadrant = im[:,im.shape[1]//4:im.shape[1]//2,im.shape[2]//4:im.shape[2]//2]
-    quadrant = quadrant - np.min(quadrant)
-    quadrant = quadrant/np.max(quadrant)
+    im = im - np.min(im)
+    im = im/np.max(im)
 
-    return quadrant
+    return im
 
 
 def in_hull(p, hull):
@@ -88,7 +85,7 @@ def forward_prop_cells(cell1, cell2):
 		common_points = points_set.intersection(points_set_k)
 
 		## if cell practically disappears, keep the old cell
-		if len(common_points)/cell_k['size'] < 0.2:
+		if len(common_points)/cell_k['size'] < 0.1:
 			new_cell2[k] = cell_k
 
 		## if the cell is practically unchanged, keep the old cell

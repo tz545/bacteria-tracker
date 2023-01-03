@@ -143,7 +143,7 @@ def general_update_figure(raw_image, stack_no, cells, fig):
     )
 def update_image(image_file_name):
     if image_file_name == None:
-        image_file_name = "PA_vipA_mnG_15nN_20x20_16x16_1S_10ums_8_GFP-1-small.tif"
+        image_file_name = "Test_file_1.tif"
 
     image_file_name = 'cells_images/' + image_file_name
     image = process_image(image_file_name)

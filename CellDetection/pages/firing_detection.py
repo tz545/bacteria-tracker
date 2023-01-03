@@ -55,7 +55,7 @@ layout = html.Div(children=[
 
     html.Div(children=[
         html.H4(children="Threshold for firing (ratio of average intensity to maximum intensity)"),
-        dcc.Slider(0,1,step=None,value=0.2,id='threshold-slider'),
+        dcc.Slider(0,1,step=None,value=0.5,id='threshold-slider'),
         dcc.Graph(id="firing-visualization")],style={'width': '40%','display': 'inline-block'}),
 
     html.Br(),
@@ -134,7 +134,7 @@ def update_boundaries(boundaries_file):
 )
 def update_image(image_file_name):
     if image_file_name == None:
-        image_file_name = "PA_vipA_mnG_15nN_20x20_16x16_1S_10ums_8_GFP-1-small.tif"
+        image_file_name = "Test_file_1.tif"
 
     image_file_name = 'cells_images/' + image_file_name
     image = process_image(image_file_name)
