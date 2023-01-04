@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch import optim
 from torch.utils.data import Dataset, DataLoader, random_split
 import torchvision.transforms.functional as TF
-from unet import UNet
+from models.unet import UNet
 import matplotlib.pyplot as plt
 
 

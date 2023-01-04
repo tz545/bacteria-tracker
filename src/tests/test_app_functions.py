@@ -1,7 +1,7 @@
 import numpy as np 
 
-from app_functions import add_cell, remove_cell, forward_prop_cells
-from cells_manipulation import Shape
+from dash_app.app_functions import add_cell, remove_cell, forward_prop_cells
+from utils import Shape
 
 def test_remove_cell_match():
 	mouse_click = {'points':[{'curveNumber': 290, 'pointNumber': 0, 'x':0.1, 'y':0.1}]}

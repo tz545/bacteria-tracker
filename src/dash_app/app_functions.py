@@ -92,7 +92,7 @@ def forward_prop_cells(cell1, cell2):
 		common_points = points_set.intersection(points_set_k)
 
 		## if cell practically disappears, keep the old cell
-		if len(common_points)/cell_k['size'] < 0.1:
+		if len(common_points)/cell_k['size'] < 0.2:
 			new_cell2[k] = cell_k
 
 		## if the cell is practically unchanged, keep the old cell

@@ -1,5 +1,5 @@
 import numpy as np 
-from cells_manipulation import Shape, pixels_to_shapes, mask_to_cells
+from utils import Shape, pixels_to_shapes, mask_to_cells
 from scipy.ndimage.morphology import binary_dilation, binary_erosion
 
 def test_pixels_to_shapes():

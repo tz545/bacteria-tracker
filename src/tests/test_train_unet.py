@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import pytest
 import os
-from train_unet import CellsDataset
+from models.train_unet import CellsDataset
 from torch.utils.data import DataLoader
 
 
