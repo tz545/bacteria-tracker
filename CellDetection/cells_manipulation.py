@@ -1,5 +1,4 @@
 import numpy as np 
-from scipy.ndimage.morphology import binary_dilation, binary_erosion
 from collections import deque
 import matplotlib.pyplot as plt 
 

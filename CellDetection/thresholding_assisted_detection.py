@@ -97,7 +97,7 @@ def threshold_segment_images(image_file, image_number):
 
 		cells = {}
 
-		segmentation_to_shapes(cells, threshold_segmentation, 1.5, cutoff=100)
+		segmentation_to_shapes(img_blur, cells, threshold_segmentation, 1.5, cutoff=100)
 
 		image_with_mask = manual_correction(cells, quadrants[q])
 
