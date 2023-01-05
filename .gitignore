@@ -1,7 +1,7 @@
 *.pdf
-*.png
 *.pyc
 __pycache__/
 
 *.DS_Store
 
+cells_pixel_values_*.png

@@ -41,7 +41,7 @@ def in_hull(p, hull):
     return hull.find_simplex(p)>=0
 
 
-def add_cell(cells, fig_shape, lasso_select):
+def add_cell(cells, fig_shape, lasso_select, cell_no=None):
 
     lasso_dict = lasso_select['lassoPoints']
     lasso_points = np.column_stack([np.array(lasso_dict['y']), np.array(lasso_dict['x'])])
@@ -57,9 +57,16 @@ def add_cell(cells, fig_shape, lasso_select):
     pixels_in_selection = in_hull(pixel_grid_points, lasso_points)
     new_shape = pixel_grid_points[pixels_in_selection==True]
     new_no = max(cells.keys())+1
-    cells[new_no] = Shape(set([tuple(x) for x in new_shape])).to_dict()
 
+    ## allows new cell to be replaced by cell that was previously deleted
+    if cell_no is None:
+        cells[new_no] = Shape(set([tuple(x) for x in new_shape])).to_dict()
+        new_no +=1
+    else:
+        cells[cell_no] = Shape(set([tuple(x) for x in new_shape])).to_dict()
     return cells, new_no
+
+    
 
 
 def remove_cell(cells, mouse_click):

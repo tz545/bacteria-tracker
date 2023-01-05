@@ -23,7 +23,7 @@ models_df = pd.DataFrame({
     })
 
 layout = html.Div(children=[
-    html.H3(children='Cell Detection'),
+    html.H3(children='Cell Detection', style={"margin-left": "30px", "margin-right":"30px", "margin-top":"20px"}),
 
     html.Div([
         dcc.Upload(id='upload-image', children=html.Div([
@@ -37,7 +37,7 @@ layout = html.Div(children=[
             'borderStyle': 'dashed',
             'borderRadius': '5px',
             'textAlign': 'center',
-            'margin': '10px'
+            'margin': '30px'
         },
         # Allow multiple files to be uploaded
         multiple=False
@@ -45,41 +45,45 @@ layout = html.Div(children=[
             ], style={'width': '48%', 'display': 'inline-block'}),
 
     html.Div(children=[
-        html.Div(children=[html.H4(children="Select model:"),
-            dcc.Dropdown(models_df['Description'].unique(), "High Sensitivity", id='model-choice-1'),
+        html.Div(children=[html.H4(children="Select model:",style={"margin-left":'50px'}),
+            dcc.Dropdown(models_df['Description'].unique(), "High Sensitivity", id='model-choice-1', style={"margin-left":'30px'}),
             dcc.Graph(id="cell-segmentation-1")],style={'width': '40%','display': 'inline-block'}),
-        html.Div(children=[html.H4(children="Select model:"),
-            dcc.Dropdown(models_df['Description'].unique(), "High Sensitivity", id='model-choice-2'),
-            dcc.Graph(id="cell-segmentation-2")], style={"margin-left": "150px",'width': '40%','display': 'inline-block'})
+        html.Div(children=[html.H4(children="Select model:",style={"margin-left":'110px'}),
+            dcc.Dropdown(models_df['Description'].unique(), "High Sensitivity", id='model-choice-2',style={"margin-left":'60px'}),
+            dcc.Graph(id="cell-segmentation-2")], style={"margin-left":'100px','width': '40%','display': 'inline-block'})
     ]),
-    html.Div(children=[html.Div(id='image-stack-no-display-1', style={"margin-left": "150px",'display': 'inline-block'}),
-                    html.Div(id='image-stack-no-display-2', style={"margin-left": "600px",'display': 'inline-block'})]),
+    html.Div(children=[html.Div(id='image-stack-no-display-1', style={"margin-left": "50px",'display': 'inline-block'}),
+                    html.Div(id='image-stack-no-display-2', style={"margin-left": "500px",'display': 'inline-block'})]),
 
     html.Br(),
     html.Div(children=[
         html.Button(id='button-prev', n_clicks=0, children='Previous'),
-        html.Button(id='button-save', n_clicks=0, children='Track cells in next frame'),
-        html.Button(id='button-next', n_clicks=0, children='Next'),
+        html.Button(id='button-save', n_clicks=0, children='Track cells in next frame', style={"margin-left":"10px"}),
+        html.Button(id='button-next', n_clicks=0, children='Next', style={"margin-left":"10px"}),
+        html.Br(),
         html.Div([html.Button("Save cells", id="btn-download-cells"), dcc.Download(id="download-cells")])
-        ], style={"margin-left": "150px",'display': 'inline-block'}),
+        ], style={"margin-left": "150px", "margin-top":"50px", 'display': 'inline-block'}),
 
     dcc.Store(id='raw-image'), 
+    dcc.Store(id='temp-image-left'),
+    dcc.Store(id='temp-image-right'),
     dcc.Store(id='num-frames'), 
     dcc.Store(id='cells', storage_type='session'),
     dcc.Store(id='image-stack-no', data=0, storage_type='session'),
     dcc.Store(id='temp-cells-1', storage_type='local'),
     dcc.Store(id='temp-cells-2', storage_type='session'), 
     dcc.Store(id='last-mouse-click-1', storage_type='memory'),
-    dcc.Store(id='last-mouse-click-2', storage_type='memory')
+    dcc.Store(id='last-mouse-click-2', storage_type='memory'),
+    dcc.Store(id='last-cell-no-1', data=-1),
+    dcc.Store(id='last-cell-no-2', data=-1)
 ])
 
 
-def general_update_cells(trig, model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells, model_choice_id, last_click):
+def general_update_cells(trig, model_file_name, mouse_click, lasso_select, raw_image, cells, model_choice_id, last_click, last_no):
 
     if trig == model_choice_id or trig == 'button-next':
 
-        raw_image = np.array(raw_image['image'], dtype=np.float32)
-        raw_image = raw_image[stack_no]
+        raw_image = np.array(raw_image, dtype=np.float32)
 
         if model_file_name != 'None':
             ## use UNet to segment
@@ -106,20 +110,20 @@ def general_update_cells(trig, model_file_name, mouse_click, lasso_select, stack
             
             cells = segmentation_to_cells(img_blur, {}, threshold_segmentation, 1.5, cutoff=100, return_dict=True)
 
-        return cells, last_click
+        return cells, last_click, last_no
 
     if lasso_select is not None:
 
         if 'lassoPoints' in lasso_select:
 
-            raw_image = np.array(raw_image['image'], dtype=np.float32)
-            raw_image = raw_image[stack_no]
+            raw_image = np.array(raw_image, dtype=np.float32)
 
             cells = {int(k):v for k,v in cells.items()}
-            cells, no = add_cell(cells, raw_image.shape, lasso_select)
-            # print("cell {0} added".format(no), flush=True)
-
-            return cells, last_click
+            if last_no == -1:
+                cells, last_no = add_cell(cells, raw_image.shape, lasso_select)
+            else:
+                cells, last_no = add_cell(cells, raw_image.shape, lasso_select, last_no)
+            return cells, last_click, last_no
 
     if mouse_click is not None:
 
@@ -127,18 +131,16 @@ def general_update_cells(trig, model_file_name, mouse_click, lasso_select, stack
 
             result = remove_cell(cells, mouse_click)
             if result is not None:
-                cells, no = result
-                # print("cell {0} deleted".format(no), flush=True)
+                cells, last_no = result
 
             last_click = mouse_click
 
-    return cells, last_click
+    return cells, last_click, last_no
 
 
-def general_update_figure(raw_image, stack_no, cells, fig):
+def general_update_figure(raw_image, cells, fig):
 
-    raw_image = np.array(raw_image['image'], dtype=np.float32)
-    raw_image = raw_image[stack_no]
+    raw_image = np.array(raw_image, dtype=np.float32)
 
     fig = px.imshow(raw_image,color_continuous_scale='gray', width=700, height=700) #color_continuous_scale='gray',
     fig.layout.coloraxis.showscale = False
@@ -166,34 +168,29 @@ def update_image(image_file_name):
     image_file_path = os.path.join(project_folder, 'data', 'raw')
     image_file_name = os.path.join(image_file_path, image_file_name)
     image = process_image(image_file_name)
-    image_list = image.tolist()
+
     return {'image': image, 'frames':len(image)}, len(image)
 
 
 @callback(
     Output('image-stack-no-display-1', 'children'),
-    Input('image-stack-no', 'data'), 
-    Input('num-frames', 'data')
-    )
-def update_frame_no_display_1(stack_no, num_frames):
-    return 'Image Frame Number: {0}/{1}'.format(stack_no, num_frames-1)
-
-
-@callback(
     Output('image-stack-no-display-2', 'children'),
+    Output('temp-image-left', 'data'),
+    Output('temp-image-right', 'data'),
     Input('image-stack-no', 'data'), 
-    Input('num-frames', 'data')
+    Input('num-frames', 'data'), 
+    State('raw-image', 'data')
     )
-def update_frame_no_display_2(stack_no, num_frames):
-    return 'Image Frame Number: {0}/{1}'.format(stack_no+1, num_frames-1)
-
+def update_frame_no_display(stack_no, num_frames, raw_image):
+    raw_image = np.array(raw_image['image'], dtype=np.float32)
+    return 'Image Frame Number: {0}/{1}'.format(stack_no, num_frames-1), 'Image Frame Number: {0}/{1}'.format(stack_no+1, num_frames-1), raw_image[stack_no], raw_image[stack_no + 1]
 
 @callback(
     Output('image-stack-no', 'data'),
     Input('button-prev', 'n_clicks'),
     Input('button-next', 'n_clicks'),
     State('image-stack-no', 'data'),
-    State('num-frames', 'data'), prevent_initial_call=True
+    State('num-frames', 'data')
     )
 def update_frame_number(next, prev, stack_no, num_frames):
     ## check if at the end of the stack, if so, give save file option
@@ -244,52 +241,53 @@ def download(n_clicks, cells, raw_image):
 @callback(
     Output('temp-cells-1', 'data'),
     Output('last-mouse-click-1', 'data'),
+    Output('last-cell-no-1', 'data'),
     Input('model-choice-1', 'value'),
     Input('cell-segmentation-1', 'clickData'),
     Input('cell-segmentation-1', 'selectedData'),
-    Input('button-prev', 'n_clicks'),
-    Input('button-next', 'n_clicks'),
     State('image-stack-no', 'data'),
-    State('raw-image', 'data'),
+    State('num-frames', 'data'),
+    State('temp-image-left', 'data'),
     State('temp-cells-1', 'data'),
     State('temp-cells-2', 'data'),
     State('cells', 'data'),
-    State('last-mouse-click-1', 'data'), prevent_initial_call=True
+    State('last-mouse-click-1', 'data'),
+    State('last-cell-no-1', 'data'), prevent_initial_call=True
     )
-def update_cells_1(model_file_name, mouse_click, lasso_select, n_prev, n_next, stack_no, raw_image, cells1, cells2, saved_cells, last_click):
+def update_cells_1(model_file_name, mouse_click, lasso_select, stack_no, num_frames, raw_image, cells1, cells2, saved_cells, last_click, last_cell_no):
 
     # print(ctx.triggered_id, mouse_click, lasso_select, flush=True)
     if ctx.triggered_id == 'button-next':
-        if stack_no >= raw_image['frames'] - 2:
-            return cells1, last_click
+        if stack_no >= num_frames - 2:
+            return cells1, last_click, last_cell_no
         else:
-            return cells2, last_click
+            return cells2, last_click, -1
 
     elif ctx.triggered_id == 'button-prev':
         if stack_no >= 1:
-            return saved_cells[str(stack_no-1)], last_click
+            return saved_cells[str(stack_no-1)], last_click, -1
         else: 
-            return cells1, last_click
+            return cells1, last_click, last_cell_no
 
     else:
-        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, stack_no, raw_image, cells1, "model-choice-1", last_click)
+        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, raw_image, cells1, "model-choice-1", last_click, last_cell_no)
 
 
 @callback(
     Output('cell-segmentation-1', 'figure'),
-    Input('raw-image', 'data'),
-    Input('image-stack-no', 'data'),
+    Input('temp-image-left', 'data'),
     Input('temp-cells-1', 'data'),
     State('cell-segmentation-1', 'figure')
     )
-def update_figure_1(raw_image, stack_no, cells, fig):
+def update_figure_1(raw_image, cells, fig):
 
-    return general_update_figure(raw_image, stack_no, cells, fig)
+    return general_update_figure(raw_image, cells, fig)
     
 
 @callback(
     Output('temp-cells-2', 'data'),
     Output('last-mouse-click-2', 'data'),
+    Output('last-cell-no-2', 'data'),
     Input('model-choice-2', 'value'),
     Input('cell-segmentation-2', 'clickData'),
     Input('cell-segmentation-2', 'selectedData'),
@@ -297,43 +295,44 @@ def update_figure_1(raw_image, stack_no, cells, fig):
     Input('button-save', 'n_clicks'),
     Input('button-next', 'n_clicks'),
     State('image-stack-no', 'data'),
-    State('raw-image', 'data'),
+    State('num-frames', 'data'),
+    State('temp-image-right', 'data'),
     State('temp-cells-1', 'data'),
     State('temp-cells-2', 'data'),
     State('cells', 'data'), 
-    State('last-mouse-click-2', 'data'), prevent_initial_call=True
+    State('last-mouse-click-2', 'data'),
+    State('last-cell-no-2', 'data'), prevent_initial_call=True
     )
-def update_cells_2(model_file_name, mouse_click, lasso_select, n_prev, n_save, n_next, stack_no, raw_image, cells1, cells2, saved_cells, last_click):
+def update_cells_2(model_file_name, mouse_click, lasso_select, n_prev, n_save, n_next, stack_no, num_frames, raw_image, cells1, cells2, saved_cells, last_click, last_cell_no):
 
     if ctx.triggered_id == 'button-save':
         ## propagate cells from first frame onto second frame
-        return forward_prop_cells(cells1, cells2), last_click
+        return forward_prop_cells(cells1, cells2), last_click, -1
 
     elif ctx.triggered_id == 'button-prev':
         if stack_no >= 1:
-            return cells1, last_click
+            return cells1, last_click, -1
         else:
-            return cells2, last_click
+            return cells2, last_click, last_cell_no
 
     elif ctx.triggered_id == 'button-next' and stack_no+1 in saved_cells.keys():
-        return saved_cells[str(stack_no+1)], last_click
+        return saved_cells[str(stack_no+1)], last_click, -1
 
     elif ctx.triggered_id == 'button-next' and stack_no >= raw_image['frames'] - 2:
-        return cells2, last_click
+        return cells2, last_click, last_cell_no
 
     else:
-        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, stack_no+1, raw_image, cells2, "model-choice-2", last_click)
+        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, raw_image, cells2, "model-choice-2", last_click, last_cell_no)
 
 @callback(
     Output('cell-segmentation-2', 'figure'),
-    Input('raw-image', 'data'),
-    Input('image-stack-no', 'data'),
+    Input('temp-image-right', 'data'),
     Input('temp-cells-2', 'data'),
     State('cell-segmentation-2', 'figure')
     )
-def update_figure_2(raw_image, stack_no, cells, fig):
+def update_figure_2(raw_image, cells, fig):
 
-    return general_update_figure(raw_image, stack_no+1, cells, fig)
+    return general_update_figure(raw_image, cells, fig)
 
 
 @callback(

@@ -16,7 +16,7 @@ src_folder = dash_folder.parent.absolute()
 project_folder = src_folder.parent.absolute()
 
 layout = html.Div(children=[ 
-    html.H3(children='Firing Detection'),
+    html.H3(children='Firing Detection', style={"margin-left":"30px", "margin-top":"20px"}),
 
     html.Div([
         dcc.Upload(id='upload-image', children=html.Div([
@@ -52,17 +52,17 @@ layout = html.Div(children=[
         # Allow multiple files to be uploaded
         multiple=False
     )       
-            ], style={'width': '48%', 'display': 'inline-block'}),
+            ], style={"margin-left":"10px",'width': '48%', 'display': 'inline-block'}),
 
     html.Br(),
-    html.Div(children=html.Button(id='button-confirm', n_clicks=0, children='Upload files'), style={"margin-left": "150px",'display': 'inline-block'}),
+    html.Div(children=html.Button(id='button-confirm', n_clicks=0, children='Upload files'), style={"margin-left": "500px",'display': 'inline-block'}),
 
     html.Br(),
 
     html.Div(children=[
-        html.H4(children="Threshold for firing (ratio of average intensity to maximum intensity)"),
+        html.H6(children="Threshold for firing (ratio of average intensity to maximum intensity)"),
         dcc.Slider(0,1,step=None,value=0.5,id='threshold-slider'),
-        dcc.Graph(id="firing-visualization")],style={'width': '40%','display': 'inline-block'}),
+        dcc.Graph(id="firing-visualization")],style={"margin-left":"30px","margin-top":"30px",'width': '40%','display': 'inline-block'}),
 
     html.Br(),
     html.Div(children=html.Div(id='image-stack-no-display'), style={"margin-left": "150px",'display': 'inline-block'}),
@@ -70,12 +70,12 @@ layout = html.Div(children=[
     html.Br(),
     html.Div(children=[
         html.Button(id='button-prev-f', n_clicks=0, children='Previous'),
-        html.Button(id='button-next-f', n_clicks=0, children='Next'),
+        html.Button(id='button-next-f', n_clicks=0, children='Next', style={"margin-left":"10px"}),
         ], style={"margin-left": "150px",'display': 'inline-block'}),
 
     html.Br(),
     html.Details([
-        html.Summary('Contents of output file:'),
+        html.Summary('Contents of output file:', style={"margin-left":"30px"}),
         dcc.Markdown(
             id='print-output'
         ),
