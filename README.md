@@ -4,9 +4,9 @@ A human-in-the-loop application that automates the detection and tracking of cel
 
 ## Table of Contents
 
-[1. Project Description](#Project-Description)
-[2. Installation](#Installation)
-[3. Usage](#Usage)
+[1. Project Description](#Project-Description)   
+[2. Installation](#Installation)   
+[3. Usage](#Usage)   
 
 ### Project Description
 
