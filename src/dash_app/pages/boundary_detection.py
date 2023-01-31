@@ -61,8 +61,11 @@ layout = html.Div(children=[
         html.Button(id='button-save', n_clicks=0, children='Track cells in next frame', style={"margin-left":"10px"}),
         html.Button(id='button-next', n_clicks=0, children='Next', style={"margin-left":"10px"}),
         html.Br(),
-        html.Div([html.Button("Save cells", id="btn-download-cells"), dcc.Download(id="download-cells")])
+        html.Div([html.Button("Save cells", id="btn-download-cells"), dcc.Download(id="download-cells")], style={"margin-top":"10px"})
         ], style={"margin-left": "150px", "margin-top":"50px", 'display': 'inline-block'}),
+
+    html.Br(),
+    html.Div(children=["Save manually corrected cell labels (of left panel) for future training:", html.Button("Save corrections", id="btn-download-labels",style={"margin-left":"10px"}), dcc.Download(id="download-labels")], style={"margin-top":"100px","margin-left": "30px", "margin-bottom":"50px", 'display': 'inline-block'}),
 
     dcc.Store(id='raw-image'), 
     dcc.Store(id='temp-image-left'),
@@ -205,10 +208,21 @@ def update_frame_number(next, prev, stack_no, num_frames):
 
 
 @callback(
+    Output("download-labels", "data"),
+    Input("btn-download-labels", "n_clicks"),
+    State("temp-cells-1", "data"),
+    State("temp-image-left", "data"), prevent_initial_call=True
+)
+def download_labels(n_clicks, cells, raw_image):
+    image_with_label = {"image":raw_image, "label":cells}
+    return dict(content=json.dumps(image_with_label), filename="cell_0.json")
+
+
+@callback(
     Output("download-cells", "data"),
     Input("btn-download-cells", "n_clicks"),
     State('cells', 'data'),
-    State('raw-image', 'data'),  prevent_initial_call=True,
+    State('raw-image', 'data'),  prevent_initial_call=True
 )
 def download(n_clicks, cells, raw_image):
     """saves cell boundaries, and compute and save average and max intensity"""
