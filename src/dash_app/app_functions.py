@@ -10,11 +10,12 @@ src_folder = str(current_folder.parent.absolute())
 if src_folder not in sys.path:
     sys.path.insert(0, src_folder)
 
-from utils import Shape, mask_to_cells, threshold_segmentation, segmentation_to_cells
+from utils import Shape, segmentation_to_cells, threshold_segmentation, mask_to_cells
 from models.unet import UNet
 
 
-def process_image(image_file):
+def access_image(image_file, page=0):
+    """Grab two consecutive frames from image file"""
 
     im = io.imread(image_file)
     im = im.astype(np.float32)
@@ -22,7 +23,7 @@ def process_image(image_file):
     im = im - np.min(im)
     im = im/np.max(im)
 
-    return im
+    return im[page:page+2], len(im)
 
 
 def in_hull(p, hull):
@@ -66,16 +67,15 @@ def add_cell(cells, fig_shape, lasso_select, cell_no=None):
         cells[cell_no] = Shape(set([tuple(x) for x in new_shape])).to_dict()
     return cells, new_no
 
-    
-
 
 def remove_cell(cells, mouse_click):
     point = mouse_click['points'][0]
-    row = int(np.rint(point['y']))
-    col = int(np.rint(point['x']))
+    row = point['y']
+    col = point['x']
 
     for c in cells.keys():
-        if [row, col] in cells[c]['points']:
+        [x, y] = cells[c]['center']
+        if ((row-x)**2 + (col-y)**2) <= 4:
             cells.pop(c)
             return cells, c
 

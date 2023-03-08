@@ -6,6 +6,7 @@ import pandas as pd
 import json
 import os, pathlib
 import cv2
+import numpy as np 
 
 from app_functions import *
 
@@ -18,7 +19,7 @@ project_folder = src_folder.parent.absolute()
 model_folder = os.path.join(project_folder, "models")
 
 models_df = pd.DataFrame({
-    "Description": ["High Sensitivity", "Good Generality", "None"],
+    "Description": ["High Sensitivity", "Good Generality", "Threshold Detection"],
     "File": [os.path.join(model_folder, "unet_01.pt"), os.path.join(model_folder, "unet_02.pt"), None]
     })
 
@@ -44,16 +45,28 @@ layout = html.Div(children=[
     )
             ], style={'width': '48%', 'display': 'inline-block'}),
 
+    html.Br(),
+    html.Div(id='filename-display', style={"margin-left": "50px", "margin-bottom": "50px"}),
+    html.Br(),
+
     html.Div(children=[
         html.Div(children=[html.H4(children="Select model:",style={"margin-left":'50px'}),
             dcc.Dropdown(models_df['Description'].unique(), "High Sensitivity", id='model-choice-1', style={"margin-left":'30px'}),
             dcc.Graph(id="cell-segmentation-1")],style={'width': '40%','display': 'inline-block'}),
-        html.Div(children=[html.H4(children="Select model:",style={"margin-left":'110px'}),
+        html.Div(children=[
+            html.H4(children="Select model:",style={"margin-left":'110px'}),
             dcc.Dropdown(models_df['Description'].unique(), "High Sensitivity", id='model-choice-2',style={"margin-left":'60px'}),
-            dcc.Graph(id="cell-segmentation-2")], style={"margin-left":'100px','width': '40%','display': 'inline-block'})
+            dcc.Graph(id="cell-segmentation-2"),
+            html.Div(children=[html.Label('Detection Mode:'),
+            dcc.RadioItems(options=["From scratch", "Keep previous"], value="From scratch", id="cell-2-detection-mode", labelStyle={'display': 'block'})], style={"margin-left":'110px'})
+            ], style={"margin-left":'100px','width': '40%','display': 'inline-block', 'verticalAlign':'top'})
     ]),
+
+    html.Br(),
+
+
     html.Div(children=[html.Div(id='image-stack-no-display-1', style={"margin-left": "50px",'display': 'inline-block'}),
-                    html.Div(id='image-stack-no-display-2', style={"margin-left": "500px",'display': 'inline-block'})]),
+                    html.Div(id='image-stack-no-display-2', style={"margin-left": "500px",'display': 'inline-block'})], style={"margin-top":"30px"}),
 
     html.Br(),
     html.Div(children=[
@@ -67,10 +80,9 @@ layout = html.Div(children=[
     html.Br(),
     html.Div(children=["Save manually corrected cell labels (of left panel) for future training:", html.Button("Save corrections", id="btn-download-labels",style={"margin-left":"10px"}), dcc.Download(id="download-labels")], style={"margin-top":"100px","margin-left": "30px", "margin-bottom":"50px", 'display': 'inline-block'}),
 
-    dcc.Store(id='raw-image'), 
-    dcc.Store(id='temp-image-left'),
-    dcc.Store(id='temp-image-right'),
+    dcc.Store(id='image-frames'),
     dcc.Store(id='num-frames'), 
+    dcc.Store(id='file-name', data="Test_file_1.tif"),
     dcc.Store(id='cells', storage_type='session'),
     dcc.Store(id='image-stack-no', data=0, storage_type='session'),
     dcc.Store(id='temp-cells-1', storage_type='local'),
@@ -160,96 +172,73 @@ def general_update_figure(raw_image, cells, fig):
 
 
 @callback(
-    Output('raw-image', 'data'),
-    Output('num-frames', 'data'),
-    Input('upload-image', 'filename')
-    )
-def update_image(image_file_name):
-    if image_file_name == None:
-        image_file_name = "Test_file_1.tif"
-
-    image_file_path = os.path.join(project_folder, 'data', 'raw')
-    image_file_name = os.path.join(image_file_path, image_file_name)
-    image = process_image(image_file_name)
-
-    return {'image': image, 'frames':len(image)}, len(image)
+    Output('filename-display', 'children'),
+    Input('file-name', 'data')
+)
+def update_filename_display(filename):
+    return 'Current file: {0}'.format(filename)
 
 
 @callback(
     Output('image-stack-no-display-1', 'children'),
     Output('image-stack-no-display-2', 'children'),
-    Output('temp-image-left', 'data'),
-    Output('temp-image-right', 'data'),
     Input('image-stack-no', 'data'), 
-    Input('num-frames', 'data'), 
-    State('raw-image', 'data')
+    Input('num-frames', 'data')
     )
-def update_frame_no_display(stack_no, num_frames, raw_image):
-    raw_image = np.array(raw_image['image'], dtype=np.float32)
-    return 'Image Frame Number: {0}/{1}'.format(stack_no, num_frames-1), 'Image Frame Number: {0}/{1}'.format(stack_no+1, num_frames-1), raw_image[stack_no], raw_image[stack_no + 1]
+def update_frame_no_display(stack_no, num_frames):
+    return 'Image Frame Number: {0}/{1}'.format(stack_no, num_frames-1), 'Image Frame Number: {0}/{1}'.format(stack_no+1, num_frames-1)
+
 
 @callback(
+    Output('image-frames', 'data'),
+    Output('num-frames', 'data'),
+    Output('file-name', 'data'),
     Output('image-stack-no', 'data'),
+    Input('upload-image', 'filename'),
     Input('button-prev', 'n_clicks'),
     Input('button-next', 'n_clicks'),
     State('image-stack-no', 'data'),
-    State('num-frames', 'data')
+    State('num-frames', 'data'), 
+    State('file-name', 'data')
     )
-def update_frame_number(next, prev, stack_no, num_frames):
-    ## check if at the end of the stack, if so, give save file option
+def update_stored_image(image_file_name, next, prev, stack_no, num_frames, stored_file_name):
+    if image_file_name == None:
+        image_file_name = stored_file_name
+
     if ctx.triggered_id == 'button-next' and stack_no <= num_frames-3:
-        return stack_no + 1
+        frame_no = stack_no + 1
 
     elif ctx.triggered_id == 'button-prev' and stack_no >= 1:
-        return stack_no - 1
+        frame_no = stack_no - 1
 
     else:
-        return stack_no
+        frame_no = stack_no
+    
+    image_file_path = os.path.join(project_folder, 'data', 'raw')
+    image_file_name = os.path.join(image_file_path, image_file_name)
+    new_image, no_frames = access_image(image_file_name, frame_no)
+
+    return new_image, no_frames, image_file_name, frame_no
 
 
 @callback(
     Output("download-labels", "data"),
     Input("btn-download-labels", "n_clicks"),
     State("temp-cells-1", "data"),
-    State("temp-image-left", "data"), prevent_initial_call=True
+    State("image-frames", "data"), prevent_initial_call=True
 )
 def download_labels(n_clicks, cells, raw_image):
-    image_with_label = {"image":raw_image, "label":cells}
+    image_with_label = {"image":raw_image[0], "label":cells}
     return dict(content=json.dumps(image_with_label), filename="cell_0.json")
 
 
 @callback(
     Output("download-cells", "data"),
     Input("btn-download-cells", "n_clicks"),
-    State('cells', 'data'),
-    State('raw-image', 'data'),  prevent_initial_call=True
+    State('cells', 'data'),  prevent_initial_call=True
 )
-def download(n_clicks, cells, raw_image):
-    """saves cell boundaries, and compute and save average and max intensity"""
-
-    raw_image = np.array(raw_image['image'], dtype=np.float32)
-
-    file_info = {}
-
-    ## need to iterate through each stack of images and cells
-    for stack in range(len(cells)):
-        raw_image_slice = raw_image[stack]
-        cell_slice = cells[str(stack)]
-
-        ## re-number cells so cell numbers are consecutive
-        cell_indices = [int(k) for k in cell_slice.keys()]
-        sorted_indices = np.sort(cell_indices)
-        cell_map = dict(zip(sorted_indices, np.arange(len(sorted_indices))))
-
-        new_cells = {}
-        for k,v in cell_slice.items():
-            points_array = np.array(cell_slice[k]['points'])
-            im_vals = raw_image_slice[points_array[:,0], points_array[:,1]]
-            new_cells[int(cell_map[int(k)])] = {'boundary':v['boundary'], 'max_intensity':float(np.max(im_vals)), 'ave_intensity':float(np.mean(im_vals))}
-
-        file_info[stack] = new_cells
-
-    return dict(content=json.dumps(file_info), filename="cells.json")
+def download(n_clicks, cells):
+    return dict(content=json.dumps(cells), filename="cells.json")
 
 
 @callback(
@@ -261,7 +250,7 @@ def download(n_clicks, cells, raw_image):
     Input('cell-segmentation-1', 'selectedData'),
     State('image-stack-no', 'data'),
     State('num-frames', 'data'),
-    State('temp-image-left', 'data'),
+    State('image-frames', 'data'),
     State('temp-cells-1', 'data'),
     State('temp-cells-2', 'data'),
     State('cells', 'data'),
@@ -284,18 +273,18 @@ def update_cells_1(model_file_name, mouse_click, lasso_select, stack_no, num_fra
             return cells1, last_click, last_cell_no
 
     else:
-        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, raw_image, cells1, "model-choice-1", last_click, last_cell_no)
+        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, raw_image[0], cells1, "model-choice-1", last_click, last_cell_no)
 
 
 @callback(
     Output('cell-segmentation-1', 'figure'),
-    Input('temp-image-left', 'data'),
+    Input('image-frames', 'data'),
     Input('temp-cells-1', 'data'),
     State('cell-segmentation-1', 'figure')
     )
 def update_figure_1(raw_image, cells, fig):
 
-    return general_update_figure(raw_image, cells, fig)
+    return general_update_figure(raw_image[0], cells, fig)
     
 
 @callback(
@@ -310,18 +299,22 @@ def update_figure_1(raw_image, cells, fig):
     Input('button-next', 'n_clicks'),
     State('image-stack-no', 'data'),
     State('num-frames', 'data'),
-    State('temp-image-right', 'data'),
+    State('image-frames', 'data'),
     State('temp-cells-1', 'data'),
     State('temp-cells-2', 'data'),
     State('cells', 'data'), 
     State('last-mouse-click-2', 'data'),
-    State('last-cell-no-2', 'data'), prevent_initial_call=True
+    State('last-cell-no-2', 'data'),
+    State('cell-2-detection-mode', 'value'), prevent_initial_call=True
     )
-def update_cells_2(model_file_name, mouse_click, lasso_select, n_prev, n_save, n_next, stack_no, num_frames, raw_image, cells1, cells2, saved_cells, last_click, last_cell_no):
+def update_cells_2(model_file_name, mouse_click, lasso_select, n_prev, n_save, n_next, stack_no, num_frames, raw_image, cells1, cells2, saved_cells, last_click, last_cell_no, detection_mode):
 
     if ctx.triggered_id == 'button-save':
-        ## propagate cells from first frame onto second frame
-        return forward_prop_cells(cells1, cells2), last_click, -1
+        if detection_mode == "Keep previous":
+            return cells1, last_click, -1
+        else:
+            ## propagate cells from first frame onto second frame
+            return forward_prop_cells(cells1, cells2), last_click, -1
 
     elif ctx.triggered_id == 'button-prev':
         if stack_no >= 1:
@@ -332,36 +325,59 @@ def update_cells_2(model_file_name, mouse_click, lasso_select, n_prev, n_save, n
     elif ctx.triggered_id == 'button-next' and stack_no+1 in saved_cells.keys():
         return saved_cells[str(stack_no+1)], last_click, -1
 
-    elif ctx.triggered_id == 'button-next' and stack_no >= raw_image['frames'] - 2:
+    elif ctx.triggered_id == 'button-next' and stack_no >= num_frames - 2:
         return cells2, last_click, last_cell_no
+    
+    elif ctx.triggered_id == 'button-next' and detection_mode == "Keep previous":
+        return cells1, last_click, -1
 
     else:
-        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, raw_image, cells2, "model-choice-2", last_click, last_cell_no)
+        return general_update_cells(ctx.triggered_id, model_file_name, mouse_click, lasso_select, raw_image[1], cells2, "model-choice-2", last_click, last_cell_no)
 
 @callback(
     Output('cell-segmentation-2', 'figure'),
-    Input('temp-image-right', 'data'),
+    Input('image-frames', 'data'),
     Input('temp-cells-2', 'data'),
     State('cell-segmentation-2', 'figure')
     )
 def update_figure_2(raw_image, cells, fig):
 
-    return general_update_figure(raw_image, cells, fig)
+    return general_update_figure(raw_image[1], cells, fig)
 
 
 @callback(
     Output('cells', 'data'),
     Input('button-save', 'n_clicks'),
     State('temp-cells-1', 'data'),
-    State('temp-cells-2', 'data'),
     State('image-stack-no', 'data'),
-    State('cells', 'data'), prevent_initial_call=True
+    State('cells', 'data'),
+    State('image-frames', 'data'), prevent_initial_call=True
     )
-def save_cells(n_save, temp_cells1, temp_cells2, stack_no, cells):
+def save_cells(n_save, temp_cells1, stack_no, cells, raw_image):
+    """saves cell boundaries, and compute and save average and max intensity"""
     
     if stack_no == 0:
         cells = {}
-    cells[str(stack_no)] = temp_cells1
-    cells[str(stack_no+1)] = temp_cells2
+
+    raw_image_slice = np.array(raw_image[0])
+
+    ## re-number cells so cell numbers are consecutive
+    cell_indices = [int(k) for k in temp_cells1.keys()]
+    sorted_indices = np.sort(cell_indices)
+    cell_map = dict(zip(sorted_indices, np.arange(len(sorted_indices))))
+
+    new_cells = {}
+    for k,v in temp_cells1.items():
+
+        ## points property has not yet been turned into intensity properties
+        if 'points' in v.keys():
+            points_array = np.array(v['points'])
+            im_vals = raw_image_slice[points_array[:,0], points_array[:,1]]
+            new_cells[int(cell_map[int(k)])] = {'boundary':v['boundary'], 'center':v['center'], 'max_intensity':float(np.max(im_vals)), 'ave_intensity':float(np.mean(im_vals))}
+
+        else:
+            new_cells[int(cell_map[int(k)])] = v
+
+    cells[str(stack_no)] = new_cells
 
     return cells
