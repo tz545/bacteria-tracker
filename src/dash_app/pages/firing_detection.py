@@ -158,7 +158,7 @@ def update_figure(confirm, stack_no, threshold, raw_image, cell_stack):
     raw_image = np.array(raw_image, dtype=np.float32)
     raw_image = raw_image[0]
 
-    fig = px.imshow(raw_image,color_continuous_scale='gray', width=700, height=700) #color_continuous_scale='gray',
+    fig = px.imshow(raw_image,color_continuous_scale='gray', width=700, height=700, binary_string=True, contrast_rescaling='minmax') #color_continuous_scale='gray',
     fig.layout.coloraxis.showscale = False
 
     cells = cell_stack[str(stack_no)]
