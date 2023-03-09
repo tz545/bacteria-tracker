@@ -1,4 +1,4 @@
-from dash import Dash, html, dcc 
+from dash import Dash, html, dcc
 import dash
 import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import load_figure_template

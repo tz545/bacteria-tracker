@@ -1,5 +1,5 @@
 import dash
-from dash import Dash, html, dcc, Input, Output, State, ctx, callback
+from dash import Dash, html, dcc, Input, Output, State, ctx, callback, clientside_callback
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
@@ -67,6 +67,10 @@ layout = html.Div(children=[
 
     html.Div(children=[html.Div(id='image-stack-no-display-1', style={"margin-left": "50px",'display': 'inline-block'}),
                     html.Div(id='image-stack-no-display-2', style={"margin-left": "500px",'display': 'inline-block'})], style={"margin-top":"30px"}),
+    html.Br(),
+
+    html.Div(children=[html.Label('Maintain zoom settings: '),
+            dcc.RadioItems(options=["Yes", "No"], value="No", id="zoom-mode", labelStyle={'display': 'block'})], style={"margin-left":'110px', "margin-top":'20px'}),
 
     html.Br(),
     html.Div(children=[
@@ -90,7 +94,9 @@ layout = html.Div(children=[
     dcc.Store(id='last-mouse-click-1', storage_type='memory'),
     dcc.Store(id='last-mouse-click-2', storage_type='memory'),
     dcc.Store(id='last-cell-no-1', data=-1),
-    dcc.Store(id='last-cell-no-2', data=-1)
+    dcc.Store(id='last-cell-no-2', data=-1), 
+    dcc.Store(id='uirevision-value-1', data=0),
+    dcc.Store(id='uirevision-value-2', data=0)
 ])
 
 
@@ -153,11 +159,11 @@ def general_update_cells(trig, model_file_name, mouse_click, lasso_select, raw_i
     return cells, last_click, last_no
 
 
-def general_update_figure(raw_image, cells, fig):
+def general_update_figure(raw_image, cells, uirevision_value):
 
     raw_image = np.array(raw_image, dtype=np.float32)
 
-    fig = px.imshow(raw_image,color_continuous_scale='gray', width=700, height=700) #color_continuous_scale='gray',
+    fig = px.imshow(raw_image,color_continuous_scale='gray', width=700, height=700, binary_string=True, contrast_rescaling='minmax') #color_continuous_scale='gray',
     fig.layout.coloraxis.showscale = False
 
     if cells is not None:
@@ -167,6 +173,8 @@ def general_update_figure(raw_image, cells, fig):
             ## only draw every 5 points on each boundary to optimize speed
             fig.add_trace(go.Scatter(x=edges[::5,1], y=edges[::5,0], mode='lines', name='cell{0}'.format(c), line={'width':1}, showlegend=False))
             fig.add_trace(go.Scatter(x=[cells[c]['center'][1]], y=[cells[c]['center'][0]], mode='markers', name='cell{0}'.format(c), marker={'color':'rgb(255,255,255)', 'size':4}, showlegend=False))
+
+    fig.update_layout(uirevision=uirevision_value)
 
     return fig
 
@@ -278,14 +286,20 @@ def update_cells_1(model_file_name, mouse_click, lasso_select, stack_no, num_fra
 
 @callback(
     Output('cell-segmentation-1', 'figure'),
+    Output('uirevision-value-1', 'data'),
     Input('image-frames', 'data'),
     Input('temp-cells-1', 'data'),
-    State('cell-segmentation-1', 'figure')
+    Input('zoom-mode', 'value'),
+    State('uirevision-value-1', 'data')
     )
-def update_figure_1(raw_image, cells, fig):
+def update_figure_1(raw_image, cells, zoom, uirevision_value):
 
-    return general_update_figure(raw_image[0], cells, fig)
-    
+    if zoom == "No":
+        new_uirev_value = (uirevision_value + 1)%2
+    else:
+        new_uirev_value = uirevision_value
+
+    return general_update_figure(raw_image[0], cells, new_uirev_value), new_uirev_value
 
 @callback(
     Output('temp-cells-2', 'data'),
@@ -336,13 +350,20 @@ def update_cells_2(model_file_name, mouse_click, lasso_select, n_prev, n_save, n
 
 @callback(
     Output('cell-segmentation-2', 'figure'),
+    Output('uirevision-value-2', 'data'),
     Input('image-frames', 'data'),
     Input('temp-cells-2', 'data'),
-    State('cell-segmentation-2', 'figure')
+    Input('zoom-mode', 'value'),
+    State('uirevision-value-2', 'data')
     )
-def update_figure_2(raw_image, cells, fig):
+def update_figure_2(raw_image, cells, zoom, uirevision_value):
 
-    return general_update_figure(raw_image[1], cells, fig)
+    if zoom == "No":
+        new_uirev_value = (uirevision_value + 1)%2
+    else:
+        new_uirev_value = uirevision_value
+
+    return general_update_figure(raw_image[1], cells, new_uirev_value), new_uirev_value
 
 
 @callback(
