@@ -83,7 +83,7 @@ layout = html.Div(children=[
     html.Br(),
     html.Div([html.Button("Download output", id="btn-download-output"), dcc.Download(id="download-output")], style={"margin-left": "150px",'display': 'inline-block'}),
 
-    dcc.Store(id='raw-image-f'), 
+    dcc.Store(id='image-frames-f'), 
     dcc.Store(id='num-frames-f'), 
     dcc.Store(id='boundary-info', storage_type='session'),
     dcc.Store(id='image-stack-no-f', data=0, storage_type='session'),
@@ -134,16 +134,15 @@ def update_boundaries(boundaries_file):
 
 
 @callback(
-    Output('raw-image-f', 'data'),
+    Output('image-frames-f', 'data'),
     Output('num-frames-f', 'data'),
     Input('upload-image', 'filename'), prevent_initial_call=True
 )
 def update_image(image_file_name):
     image_file_path = os.path.join(project_folder, 'data', 'raw')
     image_file_name = os.path.join(image_file_path, image_file_name)
-    image = process_image(image_file_name)
-    image_list = image.tolist()
-    return {'image': image, 'frames':len(image)}, len(image)
+    image, no_frames = access_image(image_file_name)
+    return image, no_frames
 
 
 @callback(
@@ -151,13 +150,13 @@ def update_image(image_file_name):
     Input('button-confirm', 'n_clicks'),
     Input('image-stack-no-f', 'data'),
     Input('threshold-slider', 'value'),
-    State('raw-image-f', 'data'),
+    State('image-frames-f', 'data'),
     State('boundary-info', 'data'), prevent_initial_call=True
     )
 def update_figure(confirm, stack_no, threshold, raw_image, cell_stack):
 
-    raw_image = np.array(raw_image['image'], dtype=np.float32)
-    raw_image = raw_image[stack_no]
+    raw_image = np.array(raw_image, dtype=np.float32)
+    raw_image = raw_image[0]
 
     fig = px.imshow(raw_image,color_continuous_scale='gray', width=700, height=700) #color_continuous_scale='gray',
     fig.layout.coloraxis.showscale = False
