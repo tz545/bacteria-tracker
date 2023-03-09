@@ -56,21 +56,22 @@ layout = html.Div(children=[
         html.Div(children=[
             html.H4(children="Select model:",style={"margin-left":'110px'}),
             dcc.Dropdown(models_df['Description'].unique(), "High Sensitivity", id='model-choice-2',style={"margin-left":'60px'}),
-            dcc.Graph(id="cell-segmentation-2"),
-            html.Div(children=[html.Label('Detection Mode:'),
-            dcc.RadioItems(options=["From scratch", "Keep previous"], value="From scratch", id="cell-2-detection-mode", labelStyle={'display': 'block'})], style={"margin-left":'110px'})
-            ], style={"margin-left":'100px','width': '40%','display': 'inline-block', 'verticalAlign':'top'})
+            dcc.Graph(id="cell-segmentation-2")
+            ], style={"margin-left":'100px','width': '40%','display': 'inline-block'})
     ]),
 
     html.Br(),
-
 
     html.Div(children=[html.Div(id='image-stack-no-display-1', style={"margin-left": "50px",'display': 'inline-block'}),
                     html.Div(id='image-stack-no-display-2', style={"margin-left": "500px",'display': 'inline-block'})], style={"margin-top":"30px"}),
     html.Br(),
 
-    html.Div(children=[html.Label('Maintain zoom settings: '),
-            dcc.RadioItems(options=["Yes", "No"], value="No", id="zoom-mode", labelStyle={'display': 'block'})], style={"margin-left":'110px', "margin-top":'20px'}),
+    html.Div(children=[
+        html.Div(children=[html.Label('Maintain zoom settings: '),
+                        dcc.RadioItems(options=["Yes", "No"], value="No", id="zoom-mode", labelStyle={'display': 'block'})], style={"margin-left": "50px",'display': 'inline-block'}),
+        html.Div(children=[html.Label('Detection Mode:'),
+                        dcc.RadioItems(options=["From scratch", "Keep previous"], value="From scratch", id="cell-2-detection-mode", labelStyle={'display': 'block'})], style={"margin-left": "500px",'display': 'inline-block'})]
+            ),
 
     html.Br(),
     html.Div(children=[
@@ -106,7 +107,7 @@ def general_update_cells(trig, model_file_name, mouse_click, lasso_select, raw_i
 
         raw_image = np.array(raw_image, dtype=np.float32)
 
-        if model_file_name != 'None':
+        if model_file_name != 'Threshold Detection':
             ## use UNet to segment
             model_file = models_df[models_df['Description']==model_file_name].iloc[0].File
             model = UNet(1, 4)
@@ -328,7 +329,7 @@ def update_cells_2(model_file_name, mouse_click, lasso_select, n_prev, n_save, n
             return cells1, last_click, -1
         else:
             ## propagate cells from first frame onto second frame
-            return forward_prop_cells(cells1, cells2), last_click, -1
+            return forward_prop_cells(cells1, cells2, np.array(raw_image[1]).shape), last_click, -1
 
     elif ctx.triggered_id == 'button-prev':
         if stack_no >= 1:
@@ -336,7 +337,7 @@ def update_cells_2(model_file_name, mouse_click, lasso_select, n_prev, n_save, n
         else:
             return cells2, last_click, last_cell_no
 
-    elif ctx.triggered_id == 'button-next' and stack_no+1 in saved_cells.keys():
+    elif ctx.triggered_id == 'button-next' and str(stack_no+1) in saved_cells.keys():
         return saved_cells[str(stack_no+1)], last_click, -1
 
     elif ctx.triggered_id == 'button-next' and stack_no >= num_frames - 2:
@@ -377,7 +378,7 @@ def update_figure_2(raw_image, cells, zoom, uirevision_value):
 def save_cells(n_save, temp_cells1, stack_no, cells, raw_image):
     """saves cell boundaries, and compute and save average and max intensity"""
     
-    if stack_no == 0:
+    if cells is None:
         cells = {}
 
     raw_image_slice = np.array(raw_image[0])
