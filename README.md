@@ -32,13 +32,13 @@ The current Dash app demonstrates a particular application of this framework. In
 
 The Dash app provides 
 
-1. A graphical interface for selecting, deleting, and modifying cells, either completely from scratch, or by correcting the outputs of a pre-trained model:
+1. A graphical interface for selecting, deleting, and modifying cells, either completely from scratch, or by correcting the outputs of a pre-trained model:  
 ![lasso select tool](src/dash_app/assets/lasso_select.png?raw=true)
 
-2. Automated cell tracking across frames of a video, with the ability to incorporate corrections provided by the user:  
+2. Automated cell tracking across frames of a video, with the ability to incorporate corrections provided by the user:    
 ![cell tracking](src/dash_app/assets/cell_tracking.png?raw=true)
 
-3. Automated detection of firing events based on a threshold provided by the user. This is accompanied by a visualization which aids the user in adjusting the threshold. 
+3. Automated detection of firing events based on a threshold provided by the user. This is accompanied by a visualization which aids the user in adjusting the threshold.  
 ![firing detection adjustable threshold](src/dash_app/assets/threshold_adjust.png?raw=true)
 
 
