@@ -11,10 +11,10 @@ layout = html.Div(children=[
     *This page is for manually correcting the cell detection algorithm and tracking cells between consecutive frames.*  
       
     1. Select image from file (currently images must be saved in bacteria-tracker/data/raw/).  
-    2. Select one model option for each image. "High sensitivity" and "Good generality" are two pre-trained ML models. "None" implments simple threshold-based segmentation.  
+    2. Select one model option for each image. "High sensitivity" and "Good generality" are two pre-trained ML models. "Threshold Detection" implments simple threshold-based segmentation.  
     3. Make edits to the left image:   
-        a. To remove a cell, single click on the outline or white dot.  
-        b. To add a cell, drag and click to zoom into a region, then use the lasso select tool (from the toolbox on the upper right corner of the image) to mark out the new boundary. The app will automatically zoom out after each lasso selection.  
+        a. To remove a cell, single click on the white dot in the center of the cell.  
+        b. To add a cell, drag and click to zoom into a region, then use the lasso select tool (from the toolbox on the upper right corner of the image) to mark out the new boundary. The default behaviour is for the app to automatically zoom out after each lasso selection. If this is not desired, e.g. when zooming into a cluster of cells, select the "Yes" option in "Maintain zoom settings" prior to zooming in.  
     ''',style={"margin-left": "30px", "margin-right":"30px", "margin-top":"20px"}),
     html.Img(src='assets/lasso_select.png', height='250', style={"margin-left": "80px"}),
     dcc.Markdown('''
@@ -22,8 +22,9 @@ layout = html.Div(children=[
     ''',style={"margin-left": "30px", "margin-right":"30px", "margin-top":"10px"}),
     html.Img(src='assets/cell_tracking.png', height='280', style={"margin-left": "100px"}),
     dcc.Markdown('''
-    5. Press "Next". The right image now becomes the left image, and repeat Step 4. At each step, ensure that cell colours and numbers align after pressing "Track cells in next frame".   
-    6. Repeat Step 5 until the end of the image stack is reached.    
+    4. Alternatively, if most cells have not moved much between the left and right frames, set "Detection Mode" to "Keep previous", click "Track cells in next frame", and the same cell boundaries in the left image will be applied to the right image. Corrections to individual cells can be made by removing the cell and redrawing directly. Note if taking this approach, do not click "Track cells in next frame" again after corrections, as it will undo them.  
+    5. Press "Next". The right image now becomes the left image, and repeat Step 4. At each step, ensure that cell colours and numbers align.   
+    6. Repeat Step 5 until the end of the image stack is reached. Press "Next" to save the final frame (note that this will not result in any visible changes).    
     7. Download the cell tracking file by clicking the "Save cells" button.  
     ''',style={"margin-left": "30px", "margin-right":"30px"}),
     html.Br(),
