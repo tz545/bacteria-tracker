@@ -33,7 +33,7 @@ The current Dash app demonstrates a particular application of this framework. In
 The Dash app provides 
 
 1. A graphical interface for selecting, deleting, and modifying cells, either completely from scratch, or by correcting the outputs of a pre-trained model:
-![lasso select tool](src/dash_app/assets/lasso_select.png?raw=true)
+![lasso select tool](src/dash_app/assets/lasso_select.png?raw=true | width=100)
 
 2. Automated cell tracking across frames of a video, with the ability to incorporate corrections provided by the user:  
 ![cell tracking](src/dash_app/assets/cell_tracking.png?raw=true)
