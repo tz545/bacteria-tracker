@@ -61,14 +61,17 @@ def add_cell(cells, fig_shape, lasso_select, cell_no=None):
 	lasso_points = np.column_stack([np.array(lasso_dict['y']), np.array(lasso_dict['x'])])
 	
 	new_shape = boundary_to_points(lasso_points, fig_shape)
-	new_no = max(cells.keys())+1
+	new_no = max([int(x) for x in cells.keys()])+1
 
 	## allows new cell to be replaced by cell that was previously deleted
 	if cell_no is None:
 		cells[new_no] = Shape(set([tuple(x) for x in new_shape])).to_dict()
 		new_no +=1
 	else:
+		cell_no = int(cell_no)
 		cells[cell_no] = Shape(set([tuple(x) for x in new_shape])).to_dict()
+		if cell_no == new_no:
+			new_no += 1
 	return cells, new_no
 
 

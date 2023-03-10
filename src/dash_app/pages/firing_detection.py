@@ -85,7 +85,7 @@ layout = html.Div(children=[
 
     dcc.Store(id='image-frames-f'), 
     dcc.Store(id='num-frames-f'), 
-    dcc.Store(id='boundary-info', storage_type='session'),
+    dcc.Store(id='boundary-info'),
     dcc.Store(id='image-stack-no-f', data=0, storage_type='session'),
     dcc.Store(id='output-data', storage_type='session')
     ])
@@ -205,7 +205,7 @@ def calc_output(threshold, confirm, cells_stack, num_frames):
                     firing_durations.append(firing_cells.pop(c))
 
     for c in firing_cells:
-        firing_durations.append(firing_cells.pop(c))
+        firing_durations.append(firing_cells[c])
 
     return [{"no_firings": len(firing_durations), "durations": firing_durations, "no_cells": len(all_cells)}]
 

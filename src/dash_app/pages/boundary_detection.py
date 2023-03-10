@@ -95,9 +95,7 @@ layout = html.Div(children=[
     dcc.Store(id='last-mouse-click-1', storage_type='memory'),
     dcc.Store(id='last-mouse-click-2', storage_type='memory'),
     dcc.Store(id='last-cell-no-1', data=-1),
-    dcc.Store(id='last-cell-no-2', data=-1), 
-    dcc.Store(id='uirevision-value-1', data=0),
-    dcc.Store(id='uirevision-value-2', data=0)
+    dcc.Store(id='last-cell-no-2', data=-1)
 ])
 
 
@@ -141,10 +139,12 @@ def general_update_cells(trig, model_file_name, mouse_click, lasso_select, raw_i
             raw_image = np.array(raw_image, dtype=np.float32)
 
             cells = {int(k):v for k,v in cells.items()}
+
             if last_no == -1:
                 cells, last_no = add_cell(cells, raw_image.shape, lasso_select)
             else:
                 cells, last_no = add_cell(cells, raw_image.shape, lasso_select, last_no)
+                
             return cells, last_click, last_no
 
     if mouse_click is not None:
@@ -257,6 +257,8 @@ def download(n_clicks, cells):
     Input('model-choice-1', 'value'),
     Input('cell-segmentation-1', 'clickData'),
     Input('cell-segmentation-1', 'selectedData'),
+    Input('button-prev', 'n_clicks'),
+    Input('button-next', 'n_clicks'),
     State('image-stack-no', 'data'),
     State('num-frames', 'data'),
     State('image-frames', 'data'),
@@ -266,7 +268,7 @@ def download(n_clicks, cells):
     State('last-mouse-click-1', 'data'),
     State('last-cell-no-1', 'data'), prevent_initial_call=True
     )
-def update_cells_1(model_file_name, mouse_click, lasso_select, stack_no, num_frames, raw_image, cells1, cells2, saved_cells, last_click, last_cell_no):
+def update_cells_1(model_file_name, mouse_click, lasso_select, n_prev, n_next, stack_no, num_frames, raw_image, cells1, cells2, saved_cells, last_click, last_cell_no):
 
     # print(ctx.triggered_id, mouse_click, lasso_select, flush=True)
     if ctx.triggered_id == 'button-next':
@@ -287,20 +289,18 @@ def update_cells_1(model_file_name, mouse_click, lasso_select, stack_no, num_fra
 
 @callback(
     Output('cell-segmentation-1', 'figure'),
-    Output('uirevision-value-1', 'data'),
     Input('image-frames', 'data'),
     Input('temp-cells-1', 'data'),
-    Input('zoom-mode', 'value'),
-    State('uirevision-value-1', 'data')
+    Input('zoom-mode', 'value')
     )
-def update_figure_1(raw_image, cells, zoom, uirevision_value):
+def update_figure_1(raw_image, cells, zoom):
 
     if zoom == "No":
-        new_uirev_value = (uirevision_value + 1)%2
+        uirev_value = 0
     else:
-        new_uirev_value = uirevision_value
+        uirev_value = 1
 
-    return general_update_figure(raw_image[0], cells, new_uirev_value), new_uirev_value
+    return general_update_figure(raw_image[0], cells, uirev_value)
 
 @callback(
     Output('temp-cells-2', 'data'),
@@ -351,31 +351,31 @@ def update_cells_2(model_file_name, mouse_click, lasso_select, n_prev, n_save, n
 
 @callback(
     Output('cell-segmentation-2', 'figure'),
-    Output('uirevision-value-2', 'data'),
     Input('image-frames', 'data'),
     Input('temp-cells-2', 'data'),
-    Input('zoom-mode', 'value'),
-    State('uirevision-value-2', 'data')
+    Input('zoom-mode', 'value')
     )
-def update_figure_2(raw_image, cells, zoom, uirevision_value):
+def update_figure_2(raw_image, cells, zoom):
 
     if zoom == "No":
-        new_uirev_value = (uirevision_value + 1)%2
+        uirev_value = 0
     else:
-        new_uirev_value = uirevision_value
+        uirev_value = 1
 
-    return general_update_figure(raw_image[1], cells, new_uirev_value), new_uirev_value
+    return general_update_figure(raw_image[1], cells, uirev_value)
 
 
 @callback(
     Output('cells', 'data'),
-    Input('button-save', 'n_clicks'),
+    Input('button-next', 'n_clicks'),
     State('temp-cells-1', 'data'),
+    State('temp-cells-2', 'data'),
     State('image-stack-no', 'data'),
     State('cells', 'data'),
-    State('image-frames', 'data'), prevent_initial_call=True
+    State('image-frames', 'data'),
+    State('num-frames', 'data'), prevent_initial_call=True
     )
-def save_cells(n_save, temp_cells1, stack_no, cells, raw_image):
+def save_cells(n_save, temp_cells1, temp_cells2, stack_no, cells, raw_image, no_frames):
     """saves cell boundaries, and compute and save average and max intensity"""
     
     if cells is None:
@@ -401,5 +401,28 @@ def save_cells(n_save, temp_cells1, stack_no, cells, raw_image):
             new_cells[int(cell_map[int(k)])] = v
 
     cells[str(stack_no)] = new_cells
+
+    if stack_no == no_frames -2:
+
+        raw_image_slice = np.array(raw_image[1])
+
+        ## re-number cells so cell numbers are consecutive
+        cell_indices = [int(k) for k in temp_cells2.keys()]
+        sorted_indices = np.sort(cell_indices)
+        cell_map = dict(zip(sorted_indices, np.arange(len(sorted_indices))))
+
+        new_cells = {}
+        for k,v in temp_cells2.items():
+
+            ## points property has not yet been turned into intensity properties
+            if 'points' in v.keys():
+                points_array = np.array(v['points'])
+                im_vals = raw_image_slice[points_array[:,0], points_array[:,1]]
+                new_cells[int(cell_map[int(k)])] = {'boundary':v['boundary'], 'center':v['center'], 'max_intensity':float(np.max(im_vals)), 'ave_intensity':float(np.mean(im_vals))}
+
+            else:
+                new_cells[int(cell_map[int(k)])] = v
+
+        cells[str(stack_no+1)] = new_cells
 
     return cells
