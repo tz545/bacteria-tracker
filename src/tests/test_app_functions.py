@@ -6,7 +6,7 @@ from utils import Shape
 def test_remove_cell_match():
 	mouse_click = {'points':[{'curveNumber': 290, 'pointNumber': 0, 'x':0.1, 'y':0.1}]}
 
-	cells = {0:{'points': [[0,0]]}}
+	cells = {0:{'points': [[0,0]], 'center':[0,0]}}
 
 	removed = remove_cell(cells, mouse_click)
 	assert removed[0] == {}
@@ -16,7 +16,7 @@ def test_remove_cell_match():
 def test_remove_cell_no_match():
 	mouse_click = {'points':[{'curveNumber': 290, 'pointNumber': 0, 'x':0.9, 'y':0.1}]}
 
-	cells = {0:{'points': [[0,0]]}}
+	cells = {0:{'points': [[0,0]], 'center':[5, 5]}}
 	assert remove_cell(cells, mouse_click) is None
 
 
@@ -29,8 +29,8 @@ def test_add_cell_adds_square():
 
 	cells = {0:'filler'}
 	new_cells, new_no = add_cell(cells, [10, 10], lasso_select)
-	assert new_no == 1
-	assert set(new_cells[new_no]['points']) == in_select
+	assert new_no == 2
+	assert set(new_cells[new_no-1]['points']) == in_select
 
 
 def test_add_cell_handles_selection_outside_boundary():
@@ -42,8 +42,8 @@ def test_add_cell_handles_selection_outside_boundary():
 
 	cells = {0:'filler'}
 	new_cells, new_no = add_cell(cells, [5, 5], lasso_select)
-	new_cells_points = set(new_cells[new_no]['points'])
-	assert new_no == 1
+	new_cells_points = set(new_cells[new_no-1]['points'])
+	assert new_no == 2
 	assert new_cells_points == in_select
 	assert (0,5) not in new_cells_points
 	assert (5,0) not in new_cells_points
@@ -60,7 +60,7 @@ def test_forward_prop_cells_no_cell2():
 
 	cell1 = {0:{'points':points1, 'size':len(points1)}}
 	cell2 = {}
-	new_cell2 = forward_prop_cells(cell1, cell2)
+	new_cell2 = forward_prop_cells(cell1, cell2, (256, 256))
 	new_cell2_points = new_cell2[0]['points']
 
 	assert len(new_cell2) == 1
@@ -77,7 +77,7 @@ def test_forward_prop_cells_small_cell2():
 
 	cell1 = {0:{'points':points1, 'size':len(points1)}}
 	cell2 = {0:{'points':[[0,0]]}}
-	new_cell2 = forward_prop_cells(cell1, cell2)
+	new_cell2 = forward_prop_cells(cell1, cell2, (256, 256))
 	new_cell2_points = new_cell2[0]['points']
 
 	assert len(new_cell2) == 1
@@ -102,7 +102,7 @@ def test_forward_prop_cells_similar_cell2():
 
 	cell1 = {0:{'points':points1, 'size':len(points1)}}
 	cell2 = {0:{'points':points2}}
-	new_cell2 = forward_prop_cells(cell1, cell2)
+	new_cell2 = forward_prop_cells(cell1, cell2, (256, 256))
 	new_cell2_points = new_cell2[0]['points']
 
 	assert len(new_cell2) == 1
@@ -127,7 +127,7 @@ def test_forward_prop_cells_moved_cell2():
 
 	cell1 = {0:{'points':points1, 'size':len(points1)}}
 	cell2 = {0:{'points':points2}}
-	new_cell2 = forward_prop_cells(cell1, cell2)
+	new_cell2 = forward_prop_cells(cell1, cell2, (256, 256))
 	new_cell2_points = new_cell2[0]['points']
 
 	assert len(new_cell2) == 1
