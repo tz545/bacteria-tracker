@@ -35,7 +35,6 @@ The Dash app provides
 1. A graphical interface for selecting, deleting, and modifying cells, either completely from scratch, or by correcting the outputs of a pre-trained model:  
 <img src="https://github.com/tz545/bacteria-tracker/src/dash_app/assets/lasso_select.png" width="48">
 
-![lasso select tool](src/dash_app/assets/lasso_select.png?raw=true)
 
 2. Automated cell tracking across frames of a video, with the ability to incorporate corrections provided by the user:    
 ![cell tracking](src/dash_app/assets/cell_tracking.png?raw=true)
