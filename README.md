@@ -33,7 +33,7 @@ The current Dash app demonstrates a particular application of this framework. In
 The Dash app provides 
 
 1. A graphical interface for selecting, deleting, and modifying cells, either completely from scratch, or by correcting the outputs of a pre-trained model:  
-<img src="https://github.com/tz545/bacteria-tracker/src/dash_app/assets/lasso_select.png?raw=true" width="48">
+<img src="https://github.com/tz545/bacteria-tracker/src/dash_app/assets/lasso_select.png" width="48">
 
 ![lasso select tool](src/dash_app/assets/lasso_select.png?raw=true)
 
